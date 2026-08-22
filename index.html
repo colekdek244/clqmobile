@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Mobile Visit App - Master Zero CSV</title>
+
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#1d4ed8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CLQ Mobile" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;900&display=swap');
+    html, body { overscroll-behavior-y: none; overscroll-behavior-x: none; }
+    body { background-color: #f3f4f6; font-family: 'Cairo', sans-serif; margin: 0; padding: 0; } 
+  </style>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "react": "https://esm.sh/react@18.2.0",
+        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+        "lucide-react": "https://esm.sh/lucide-react@0.263.1?external=react",
+        "firebase/app": "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
+        "firebase/firestore": "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js", 
+        "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime"
+      }
+    }
+  </script>
+  
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module">
+    import React, { useState, useEffect, useMemo } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import { 
+      MapPin, Phone, MessageSquare, CheckCircle, AlertCircle, 
+      LayoutDashboard, Users, Loader2, RefreshCw, Database, Info, 
+      Lock, UserCircle, LogOut, ChevronDown, Camera, X, Save, Edit,
+      FileText, Image as ImageIcon, ExternalLink, Sun, Moon
+    } from 'lucide-react';
+    import { initializeApp } from 'firebase/app';
+    import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+    import { getFirestore, doc, setDoc, collection, addDoc } from 'firebase/firestore';
+
+    // Konfigurasi Firebase Firestore & Auth
+    const firebaseConfig = {
+      apiKey: "AIzaSyCQa34OvKQSyGXjntUkjAwA-lJmbPgFBK0",
+      authDomain: "clq-sys.firebaseapp.com",
+      projectId: "clq-sys",
+      storageBucket: "clq-sys.firebasestorage.app",
+      messagingSenderId: "556009024722",
+      appId: "1:556009024722:web:150c76503dbbbcca0bd10b"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const appId = 'coleq-sys-app';
+
+    // KONFIGURASI KEAMANAN & API JSON
+    const APP_SECRET_TOKEN = "CLQ-ADMIN-SECURE-8899";
+    const VISIT_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzhWlW0vJyH5MjWw5R565AQ9PVxVKKX5x8Yu59ReKrxZN20q8uweEtsHVmrGlxDnZBR/exec";
+    const VISIT_ACTION_NAME = "update_visit";
+
+    const IDB_NAME = 'ColeqOfflineDB';
+    const IDB_VERSION = 1;
+    const IDB_STORE = 'offline_visits';
+
+    const openIDB = () => {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(IDB_NAME, IDB_VERSION);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE, { keyPath: 'id', autoIncrement: true });
+          }
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    };
+
+    const getIDBQueue = async () => {
+      try {
+        const db = await openIDB();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction(IDB_STORE, 'readonly');
+          const store = tx.objectStore(IDB_STORE);
+          const req = store.getAll();
+          req.onsuccess = () => resolve(req.result || []);
+          req.onerror = () => reject(req.error);
+        });
+      } catch (err) { return []; }
+    };
+
+    const addIDBItem = async (item) => {
+      const db = await openIDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.add(item);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    };
+
+    const updateIDBItem = async (item) => {
+      const db = await openIDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.put(item);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    };
+
+    const deleteIDBItem = async (id) => {
+      const db = await openIDB();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        const store = tx.objectStore(IDB_STORE);
+        const req = store.delete(id);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    };
+
+    const getAcct = (r) => {
+      if (!r) return null;
+      let val = r.acctno || r.no_rekening || r.account_no || r.rekening || r['no rekening'] || r['no. rekening'] || r['acct no'] || r['nomor rekening'] || r.norek || r.account || r.fasilitas || r['no fasilitas'] || r.no_fasilitas || r['no. rek'] || r['no rek'] || r.loan || r['no loan'];
+      return val ? String(val).trim() : null;
+    };
+    const getUserId = (r) => {
+      if (!r) return "";
+      let val = r.id_user || r.petugas || r.id || r['id petugas'] || r.userid || r['user id'] || r.username;
+      return val ? String(val).trim() : "";
+    };
+    const getUserName = (r) => {
+      if (!r) return "";
+      let val = r.nama_user || r.nama || r.name || r.nama_petugas || r['nama petugas'] || r['nama lengkap'] || r.sname || r.nama_debitur || r['nama debitur'];
+      return val ? String(val).trim() : "";
+    };
+    const getUserLevel = (r) => {
+      if (!r) return 3;
+      let val = r.level_user || r.level || r.role || r.hak_akses || r['hak akses'];
+      return (val !== undefined && val !== "") ? Number(val) : 3;
+    };
+    
+    const stripDecimals = (str) => {
+        let val = String(str).trim();
+        if (val.endsWith('.00')) val = val.slice(0, -3);
+        if (val.endsWith(',00')) val = val.slice(0, -3);
+        if (val.startsWith('(') && val.endsWith(')')) val = '-' + val.slice(1, -1);
+        return val;
+    };
+
+    const parseNominal = (val) => {
+        let str = stripDecimals(val || '0');
+        const isNeg = str.includes('-');
+        const num = parseInt(str.replace(/[^0-9]/g, ''), 10) || 0;
+        return isNeg ? -num : num;
+    };
+
+    const formatUang = (val) => {
+        if (val === null || val === undefined || val === '-' || val === '') return '-';
+        let str = stripDecimals(val);
+        const isNeg = str.includes('-');
+        const num = parseInt(str.replace(/[^0-9]/g, ''), 10) || 0;
+        if (num === 0 && !str.includes('0')) return '-'; 
+        return isNeg ? `-${num.toLocaleString('id-ID')}` : num.toLocaleString('id-ID');
+    };
+
+    const formatWhatsAppNumber = (phone) => {
+      if (!phone) return null;
+      let cleaned = phone.toString().replace(/\D/g, '');
+      if (cleaned.startsWith('0')) cleaned = '62' + cleaned.substring(1);
+      else if (!cleaned.startsWith('62')) cleaned = '62' + cleaned;
+      return cleaned;
+    };
+    const getCurrentDateTime = () => {
+      const now = new Date();
+      return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    };
+
+    const getLocalDateStr = () => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const getDisplayImageUrl = (url) => {
+      if (!url) return '';
+      if (url.startsWith('data:image')) return url;
+      if (url.includes('drive.google.com')) {
+        const idMatch = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/id=([a-zA-Z0-9_-]+)/);
+        if (idMatch && idMatch[1]) {
+          return `https://drive.google.com/thumbnail?id=${idMatch[1]}&sz=w1200`;
+        }
+      }
+      return url;
+    };
+
+    // Helper panggil JSON API GAS
+    const callApi = async (action, payload = {}) => {
+      for (let i = 0; i < 3; i++) {
+        try {
+          const response = await fetch(VISIT_WEBAPP_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({ token: APP_SECRET_TOKEN, action, ...payload })
+          });
+          const textRes = await response.text();
+          let jsonRes;
+          try { jsonRes = JSON.parse(textRes); } catch(e) { jsonRes = null; }
+          if (!jsonRes) throw new Error("Format respon server tidak valid/Timeout. Silakan ulangi.");
+          return jsonRes;
+        } catch (error) {
+          if (i === 2) throw error;
+          await new Promise(res => setTimeout(res, 2000 * (i + 1))); 
+        }
+      }
+    };
+
+    function MobileApp() {
+      const [user, setUser] = useState(null);
+      const [appUser, setAppUser] = useState(() => {
+        try {
+          const saved = localStorage.getItem('clq_app_user');
+          return saved ? JSON.parse(saved) : null;
+        } catch(e) { return null; }
+      }); 
+      
+      const [loginId, setLoginId] = useState('');
+      const [loginPassword, setLoginPassword] = useState('');
+      const [isLoggingIn, setIsLoggingIn] = useState(false);
+      const [loginError, setLoginError] = useState('');
+
+      const [activeTab, setActiveTab] = useState('dashboard');
+      const [loading, setLoading] = useState(true);
+      const [modalConfig, setModalConfig] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null });
+
+      const [showUserForm, setShowUserForm] = useState(false);
+      const [userFormData, setUserFormData] = useState({ id_user: '', nama_user: '', password: '', level_user: '3', jabatan: '', lat: '', lon: '', last_update: '', foto_user: '' });
+      const [isSavingUser, setIsSavingUser] = useState(false);
+
+      const [visitData, setVisitData] = useState([]);
+      const [isFetchingVisit, setIsFetchingVisit] = useState(false);
+      const [activeVisitCustomer, setActiveVisitCustomer] = useState(null);
+      const [visitFormData, setVisitFormData] = useState({});
+      const [isSavingVisitForm, setIsSavingVisitForm] = useState(false);
+      const [expandedVisitLokasi, setExpandedVisitLokasi] = useState({}); 
+
+      const [locationData, setLocationData] = useState({ lat: null, lng: null, address: '', addressObj: null });
+      const [dashboardStats, setDashboardStats] = useState({ target: 0, targetRp: 0, dikunjungi: 0, dikunjungiRp: 0, belum: 0, belumRp: 0 });
+      const [priorityTasks, setPriorityTasks] = useState([]); 
+      const [bayarData, setBayarData] = useState([]); 
+      const [isFetchingStats, setIsFetchingStats] = useState(false);
+      
+      const [clusterName, setClusterName] = useState('Memuat...');
+      const [parameters, setParameters] = useState({ kondisiRumah: [], bertemuDengan: [], rukos: [], tindakan: [], jabatan: [] });
+
+      const [isOffline, setIsOffline] = useState(!navigator.onLine);
+      const [offlineQueue, setOfflineQueue] = useState([]);
+      const [isSyncing, setIsSyncing] = useState(false);
+
+      const [reportData, setReportData] = useState([]);
+      const [isFetchingReport, setIsFetchingReport] = useState(false);
+      const [reportFilterDateStart, setReportFilterDateStart] = useState(() => getLocalDateStr());
+      const [reportFilterDateEnd, setReportFilterDateEnd] = useState(() => getLocalDateStr());
+      const [previewPhoto, setPreviewPhoto] = useState(null);
+      const [expandedReportLokasi, setExpandedReportLokasi] = useState({});
+
+      const [wakeLock, setWakeLock] = useState(null);
+      const [isTrackingActive, setIsTrackingActive] = useState(false);
+
+      const showNotification = (type, title, message, onConfirm = null) => setModalConfig({ isOpen: true, type, title, message, onConfirm });
+      const closeNotification = () => setModalConfig({ ...modalConfig, isOpen: false });
+
+      const groupedVisitData = useMemo(() => {
+        const grouped = {};
+        visitData.forEach(item => {
+          const lokasi = item.lpdloc || item.lokasi || 'TIDAK DIKETAHUI';
+          if (!grouped[lokasi]) grouped[lokasi] = [];
+          grouped[lokasi].push(item);
+        });
+        return grouped;
+      }, [visitData]);
+
+      const toggleVisitLokasi = (lokasi) => setExpandedVisitLokasi(prev => ({ ...prev, [lokasi]: !prev[lokasi] }));
+
+      const groupedReportData = useMemo(() => {
+        const grouped = {};
+        reportData.forEach(item => {
+          const lokasi = item.lpdloc || item.lokasi || 'TIDAK DIKETAHUI';
+          if (!grouped[lokasi]) grouped[lokasi] = [];
+          grouped[lokasi].push(item);
+        });
+        return grouped;
+      }, [reportData]);
+
+      const toggleReportLokasi = (lokasi) => setExpandedReportLokasi(prev => ({ ...prev, [lokasi]: !prev[lokasi] }));
+
+      const requestWakeLock = async () => {
+        if ('wakeLock' in navigator) {
+          try {
+            const lock = await navigator.wakeLock.request('screen');
+            lock.addEventListener('release', () => {
+              setWakeLock(null);
+              setIsTrackingActive(false);
+            });
+            setWakeLock(lock);
+            setIsTrackingActive(true);
+          } catch (err) {
+            setWakeLock(null);
+            setIsTrackingActive(false);
+          }
+        } else {
+          setIsTrackingActive(false);
+        }
+      };
+
+      const toggleTrackingMode = async () => {
+        if (!isTrackingActive) {
+          await requestWakeLock();
+        } else {
+          if (wakeLock !== null) {
+            wakeLock.release().catch(()=>{});
+          }
+        }
+      };
+
+      useEffect(() => {
+        const handleVisibilityChange = () => {
+          if (document.visibilityState === 'visible' && appUser) {
+             requestWakeLock();
+          }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        if (appUser && document.visibilityState === 'visible') requestWakeLock();
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }, [appUser]);
+
+      const handleProfilePhoto = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+          showNotification('error', 'File Ditolak', 'Hanya format gambar yang diperbolehkan.');
+          e.target.value = null; return;
+        }
+        try {
+          let img;
+          if (window.createImageBitmap) { img = await createImageBitmap(file, { imageOrientation: 'from-image' }); } 
+          else {
+            const dataUrl = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = (ev) => resolve(ev.target.result); reader.readAsDataURL(file); });
+            img = new Image(); await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; });
+          }
+          const size = Math.min(img.width, img.height);
+          const startX = (img.width - size) / 2;
+          const startY = (img.height - size) / 2;
+          const canvas = document.createElement('canvas'); 
+          canvas.width = 120; canvas.height = 120;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, startX, startY, size, size, 0, 0, 120, 120);
+          setUserFormData(prev => ({...prev, foto_user: canvas.toDataURL('image/jpeg', 0.6)}));
+          canvas.width = 0; canvas.height = 0;
+        } catch (err) { showNotification('error', 'Gagal Memproses', 'Perangkat tidak mendukung.'); }
+      };
+
+      const handlePhoto = async (e, field) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (file.type.startsWith('image/')) {
+          try {
+            let img; let width, height;
+            if (window.createImageBitmap) { img = await createImageBitmap(file, { imageOrientation: 'from-image' }); width = img.width; height = img.height; } 
+            else {
+              const dataUrl = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = (ev) => resolve(ev.target.result); reader.readAsDataURL(file); });
+              img = new Image(); await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; }); width = img.width; height = img.height;
+            }
+
+            const MAX_DIMENSION = 600; let scale = 1;
+            if (width > height && width > MAX_DIMENSION) scale = MAX_DIMENSION / width;
+            else if (height >= width && height > MAX_DIMENSION) scale = MAX_DIMENSION / height;
+
+            const canvas = document.createElement('canvas'); canvas.width = width * scale; canvas.height = height * scale;
+            const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            
+            const watermarkHeight = canvas.height * 0.30; const blockHeight = watermarkHeight / 3; const startY = canvas.height - watermarkHeight; const padX = canvas.width * 0.04; 
+            const fontFamily = 'Cairo, sans-serif'; ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 6; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2; 
+
+            const fillTextFit = (text, x, y, maxWidth, initialFontSize, weight) => {
+              let fontSize = initialFontSize; ctx.font = `${weight} ${fontSize}px ${fontFamily}`;
+              while (ctx.measureText(text).width > maxWidth && fontSize > 8) { fontSize -= 0.5; ctx.font = `${weight} ${fontSize}px ${fontFamily}`; }
+              ctx.fillText(text, x, y);
+            };
+
+            const logoUrl = "https://lh3.googleusercontent.com/d/1qDaQ3F_0RDvC8GY8JQ1AKMEFYiiB-sgy"; 
+            const logoImg = new Image(); logoImg.crossOrigin = "Anonymous"; 
+            await new Promise((resolve) => { logoImg.onload = resolve; logoImg.onerror = resolve; logoImg.src = logoUrl; });
+
+            if (logoImg.complete && logoImg.naturalWidth !== 0) {
+                const logoH = blockHeight * 0.7; const logoW = (logoImg.naturalWidth / logoImg.naturalHeight) * logoH; const logoY = startY + (blockHeight * 0.15); 
+                ctx.drawImage(logoImg, padX, logoY, logoW, logoH);
+            } else {
+                ctx.font = `900 ${blockHeight * 0.5}px ${fontFamily}`; ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'middle'; ctx.fillText('BANK BTN', padX, startY + (blockHeight / 2));
+            }
+
+            const block2Y = startY + blockHeight; const now = new Date();
+            const jamStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const tglStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()}`;
+            const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu']; const hariStr = days[now.getDay()];
+
+            ctx.font = `700 ${blockHeight * 0.7}px ${fontFamily}`; ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'middle'; ctx.fillText(jamStr, padX, block2Y + (blockHeight / 2));
+            const lineX = padX + ctx.measureText(jamStr).width + (canvas.width * 0.03); 
+            ctx.shadowColor = 'transparent'; ctx.beginPath(); ctx.moveTo(lineX, block2Y + (blockHeight * 0.2)); ctx.lineTo(lineX, block2Y + (blockHeight * 0.8)); ctx.lineWidth = Math.max(3, canvas.width * 0.006); ctx.strokeStyle = '#ef4444'; ctx.stroke();
+            ctx.shadowColor = 'rgba(0,0,0,0.9)'; 
+
+            const textX = lineX + (canvas.width * 0.03);
+            ctx.font = `500 ${blockHeight * 0.3}px ${fontFamily}`; ctx.textBaseline = 'bottom'; ctx.fillText(tglStr, textX, block2Y + (blockHeight * 0.45)); 
+            ctx.textBaseline = 'top'; ctx.fillText(hariStr, textX, block2Y + (blockHeight * 0.55)); 
+
+            const block3Y = startY + (2 * blockHeight);
+            let baris1 = "Lokasi tidak diketahui"; let baris2 = "Menunggu alamat..."; let baris3 = locationData.lat !== null && locationData.lat !== '-' ? `Lat: ${locationData.lat}, Lng: ${locationData.lng}` : "Sinyal GPS belum didapatkan...";
+
+            if (locationData.address && !locationData.address.includes('Mencari') && !locationData.address.includes('Gagal')) {
+                const parts = locationData.address.split(',').map(s => s.trim()).filter(Boolean);
+                if (parts.length > 0) {
+                    if (parts.length >= 4) { baris1 = `${parts[0]}, ${parts[1]}`; baris2 = parts.slice(2, -1).join(', '); } 
+                    else if (parts.length > 1) { baris1 = parts[0]; baris2 = parts.slice(1, -1).length > 0 ? parts.slice(1, -1).join(', ') : parts[1]; } 
+                    else { baris1 = parts[0]; baris2 = ""; }
+                }
+            } else if (locationData.lat !== null && locationData.lat !== '-') {
+                 baris1 = "Jaringan lambat / Area tak terpetakan"; baris2 = "Periksa koneksi internet Anda.";
+            }
+
+            const maxTextW = canvas.width - (padX * 2);
+            ctx.fillStyle = '#ffffff'; ctx.textBaseline = 'bottom'; fillTextFit(baris1, padX, block3Y + (blockHeight * 0.35), maxTextW, blockHeight * 0.28, '700');
+            ctx.fillStyle = '#f8fafc'; ctx.textBaseline = 'top'; fillTextFit(baris2, padX, block3Y + (blockHeight * 0.40), maxTextW, blockHeight * 0.22, '400');
+            ctx.fillStyle = '#fbbf24'; ctx.textBaseline = 'top'; fillTextFit(baris3, padX, block3Y + (blockHeight * 0.70), maxTextW, blockHeight * 0.20, '500');
+            ctx.textBaseline = 'alphabetic';
+
+            setVisitFormData(prev => ({...prev, [field]: canvas.toDataURL('image/jpeg', 0.5)}));
+            canvas.width = 0; canvas.height = 0;
+
+          } catch (err) { console.error(err); showNotification('error', 'Gagal Memproses Gambar', 'Pastikan perangkat dan browser mendukung.'); }
+        } else { showNotification('error', 'File Ditolak', 'Hanya format Gambar.'); e.target.value = null; }
+      };
+
+      // API: FETCH PARAMETERS & CONFIG 
+      const fetchAppConfigAndParams = async () => {
+        try {
+          const res = await callApi('get_parameters');
+          if (res && res.status === 'success') {
+             if (res.clusterName) setClusterName(res.clusterName);
+             if (res.data && res.data.length > 0) {
+                const rawData = res.data;
+                setParameters({ 
+                  kondisiRumah: [...new Set(rawData.map(r => r['kondisi rumah']).filter(Boolean))], 
+                  bertemuDengan: [...new Set(rawData.map(r => r['bertemu dengan']).filter(Boolean))], 
+                  rukos: [...new Set(rawData.map(r => r['rukos']).filter(Boolean))], 
+                  tindakan: [...new Set(rawData.map(r => r['tindakan']).filter(Boolean))], 
+                  jabatan: [...new Set(rawData.map(r => r['jabatan']).filter(Boolean))] 
+                });
+             }
+          }
+        } catch (err) { 
+          console.warn("Gagal menarik config & parameter via API", err);
+          if (clusterName === 'Memuat...') setClusterName('Cluster Quality');
+        }
+      };
+
+      const fetchVisitData = async () => {
+        if (!appUser) return;
+        setIsFetchingVisit(true);
+        try {
+          const myId = getUserId(appUser).toUpperCase();
+          const res = await callApi('get_visit_pending', { id_user: myId });
+          
+          if (res && res.status === 'success') {
+             const pendingData = res.data || [];
+             const resRindeb = await callApi('get_rindeb');
+             const rawDataRindeb = (resRindeb && resRindeb.status === 'success') ? resRindeb.data : [];
+             
+             setVisitData(pendingData.map(visit => {
+                const acctno = getAcct(visit);
+                const matchRindeb = rawDataRindeb.find(r => getAcct(r) === acctno);
+                return {
+                  ...visit, acctno: acctno,
+                  sname: matchRindeb ? getUserName(matchRindeb) : (getUserName(visit) || "Tanpa Nama"),
+                  lpdloc: visit.lokasi || visit.lpdloc || (matchRindeb ? matchRindeb.lpdloc : "TIDAK DIKETAHUI"),
+                  alamat_agunan: matchRindeb ? (matchRindeb.alamat_agunan || matchRindeb['alamat agunan'] || matchRindeb.alamat || "Tidak Ditemukan") : "Data Rindeb Tidak Ada",
+                  hp1: matchRindeb ? (matchRindeb.hp1 || matchRindeb.hp || "") : "",
+                  so_pokok_tdy: matchRindeb ? matchRindeb.so_pokok_tdy : "0",
+                  kol_tdy: matchRindeb ? matchRindeb.kol_tdy : "-",
+                  tgk_angsuran: matchRindeb ? (matchRindeb.tgk_angsuran || matchRindeb.tgl_angsuran) : (visit.tgk_angsuran || "0")
+                };
+             }));
+          } else { throw new Error(res?.message || 'Server error'); }
+        } catch (error) { showNotification('error', 'Gagal Memuat Data', error.message); } finally { setIsFetchingVisit(false); }
+      };
+
+      const fetchDashboardStats = async () => {
+        if (!appUser) return;
+        setIsFetchingStats(true);
+        try {
+          const myId = getUserId(appUser).toUpperCase();
+          const [resStats, resPending, resBayar, resKelolaan] = await Promise.all([
+             callApi('get_dashboard_stats'),
+             callApi('get_visit_pending', { id_user: myId }),
+             callApi('get_bayar'),
+             callApi('get_kelolaan')
+          ]);
+
+          if (resStats?.status === 'success' && resStats.stats) setDashboardStats(resStats.stats);
+          
+          if (resPending?.status === 'success') {
+             const pendingTasksList = (resPending.data || []).map(row => ({
+                ...row,
+                pokokVal: parseNominal(row.so_pokok_tdy || row.so_pokok || 0),
+                kolVal: parseInt(String(row.kol_tdy || row.kol || '0').replace(/[^0-9]/g, ''), 10) || 0 
+             }));
+             setPriorityTasks(pendingTasksList.sort((a, b) => b.pokokVal !== a.pokokVal ? b.pokokVal - a.pokokVal : b.kolVal - a.kolVal).slice(0, 5));
+          }
+          
+          if (resBayar?.status === 'success') {
+             let myKelolaanAccts = new Set();
+             if (resKelolaan?.status === 'success') {
+                myKelolaanAccts = new Set(resKelolaan.data.filter(k => getUserId(k).toUpperCase() === myId).map(k => getAcct(k)).filter(Boolean));
+             }
+
+             const mappedBayar = (resBayar.data || []).filter(b => {
+                const acct = getAcct(b);
+                return acct && myKelolaanAccts.has(acct);
+             }).map(b => ({
+                acctno: getAcct(b),
+                sname: getUserName(b) || "Tanpa Nama",
+                lpdloc: b.lpdloc || b.lokasi || "-",
+                kol_tdy: b.kol_tdy || b.kol || "-",
+                so_pokok_tdy: b.so_pokok_tdy || b.pokok || b.nominal || b.amount || b.bayar || "0"
+             }));
+             setBayarData(mappedBayar);
+          }
+        } catch (err) { console.error(err); } finally { setIsFetchingStats(false); }
+      };
+
+      const handleFetchReport = async () => {
+        if (!appUser) return;
+        setIsFetchingReport(true);
+        try {
+          const myId = getUserId(appUser).toUpperCase();
+          const res = await callApi('get_report', { date_from: reportFilterDateStart, date_to: reportFilterDateEnd, id_user: myId });
+          
+          if(res && res.status === 'success') {
+             const rawReports = res.data || [];
+             
+             // PERBAIKAN: Menoleransi berbagai jenis header tanggal (tanggal, tanggal visit, tgl visit)
+             const getRawDate = (r) => r.tanggal || r['tanggal visit'] || r.tanggal_visit || r['tgl visit'] || '';
+             
+             rawReports.sort((a,b) => new Date(getRawDate(b) || 0) - new Date(getRawDate(a) || 0));
+             
+             setReportData(rawReports.map(visit => ({
+                ...visit,
+                acctno: getAcct(visit),
+                sname: getUserName(visit) || "Tanpa Nama",
+                lpdloc: visit.lokasi || visit.lpdloc || "TIDAK DIKETAHUI",
+                alamat_agunan: visit.alamat_agunan || visit.alamat || "-",
+                so_pokok_tdy: visit._rindeb_so_pokok || visit.so_pokok_tdy || "0",
+                kol_tdy: visit._rindeb_kol || visit.kol_tdy || "-",
+                tgk_angsuran: visit.tgk_angsuran || "0",
+                tanggal: String(getRawDate(visit)).trim()
+             })));
+          } else {
+             throw new Error(res?.message || 'Format JSON dari server rusak atau time-out.');
+          }
+        } catch(e) {
+          showNotification('error', 'Gagal Memuat Laporan', e.message || 'Koneksi ke Apps Script terputus.');
+        } finally {
+          setIsFetchingReport(false);
+        }
+      };
+
+      const submitVisitForm = async () => {
+        const requiredFields = [
+          { key: "KONDISI RUMAH", label: "Kondisi Rumah" }, 
+          { key: "BERTEMU DENGAN", label: "Bertemu Dengan" }, 
+          { key: "RUKOS", label: "Rukos" }, 
+          { key: "TINDAKAN", label: "Tindakan" }, 
+          { key: "CATATAN", label: "Catatan" }, 
+          { key: "FOTO RUMAH", label: "Foto Rumah" }
+        ];
+
+        for (let field of requiredFields) {
+          if (!visitFormData[field.key] || visitFormData[field.key].trim() === "") { 
+            showNotification('warning', 'Data Belum Lengkap', `Mohon lengkapi kolom "${field.label}" terlebih dahulu.`); 
+            return; 
+          }
+        }
+
+        setIsSavingVisitForm(true);
+        
+        const finalVisitData = {
+            ...visitFormData,
+            "TANGGAL VISIT": visitFormData["TANGGAL"], 
+            "TGL VISIT": visitFormData["TANGGAL"],
+            "TANGGAL_VISIT": visitFormData["TANGGAL"],
+            "LAT": (locationData && locationData.lat !== '-' && locationData.lat !== null) ? String(locationData.lat) : "",
+            "LON": (locationData && locationData.lng !== '-' && locationData.lng !== null) ? String(locationData.lng) : ""
+        };
+
+        const payload = { action: VISIT_ACTION_NAME, visit_id: activeVisitCustomer['visit id'] || activeVisitCustomer.visit_id || '', data: finalVisitData };
+
+        if (!isOffline && locationData && locationData.lat && locationData.lat !== '-' && user && user.uid !== 'mode-sandbox') {
+          try {
+            const timestamp = Date.now();
+            const dateStr = getLocalDateStr(); 
+            const userName = getUserName(appUser) || "Petugas";
+            const userId = getUserId(appUser).toUpperCase(); 
+            const visitTargetName = activeVisitCustomer.acctno + " - " + (activeVisitCustomer.sname || getUserName(activeVisitCustomer));
+            
+            addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'routes'), {
+              userId, userName, lat: locationData.lat, lng: locationData.lng, 
+              timestamp, dateStr, isVisit: true, visitTarget: visitTargetName
+            }).catch(e => console.warn(e));
+
+            setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'locations', userId), { 
+              userId, userName, lat: locationData.lat, lng: locationData.lng, timestamp 
+            }).catch(e => {});
+
+          } catch(e) { console.warn("Gagal mencatat rute visit di peta", e); }
+        }
+
+        const saveToOfflineQueue = async () => {
+          try {
+            const currentQueue = await getIDBQueue();
+            const existing = currentQueue.find(item => item.acctNo === visitFormData.ACCTNO);
+            if (existing && existing.id !== undefined) {
+              await deleteIDBItem(existing.id);
+            }
+
+            const idbItem = {
+              acctNo: visitFormData.ACCTNO,
+              payload: payload,
+              createdAt: Date.now(),
+              retryCount: 0
+            };
+            await addIDBItem(idbItem);
+            const updatedQueue = await getIDBQueue();
+            setOfflineQueue(updatedQueue);
+            showNotification('info', 'Tersimpan Secara Offline', 'Koneksi terputus. Data disimpan aman di HP dan otomatis dikirim saat sinyal kembali.');
+            setActiveTab('visit'); 
+            setActiveVisitCustomer(null);
+          } catch(e) {
+            showNotification('error', 'Gagal Simpan Offline', e.message);
+          }
+        };
+
+        if (isOffline) { await saveToOfflineQueue(); setIsSavingVisitForm(false); return; }
+
+        try {
+          const res = await callApi(VISIT_ACTION_NAME, { visit_id: payload.visit_id, data: payload.data });
+
+          if (res && res.status === 'success') {
+            showNotification('success', 'Visit Tersimpan', 'Data hasil kunjungan berhasil diunggah.');
+            await fetchVisitData(); setActiveTab('dashboard'); setActiveVisitCustomer(null);
+          } else throw new Error(res?.message || 'Format respon server tidak valid.');
+        } catch (error) { 
+          if (error.message && (error.message.includes("Failed to fetch") || error.message.includes("NetworkError") || error.message.includes("Unexpected token"))) await saveToOfflineQueue();
+          else showNotification('error', 'Penyimpanan Gagal', error.message || 'Terdapat kesalahan pada jaringan.'); 
+        } finally { setIsSavingVisitForm(false); }
+      };
+
+      const syncOfflineQueue = async () => {
+        if (isSyncing || !navigator.onLine) return;
+        const queue = await getIDBQueue();
+        if (!queue || queue.length === 0) return;
+
+        setIsSyncing(true); let successCount = 0;
+
+        for (let i = 0; i < queue.length; i++) {
+          const item = queue[i];
+          try {
+            const res = await callApi(item.payload.action, { visit_id: item.payload.visit_id, data: item.payload.data });
+
+            if (res && res.status === 'success') { 
+              successCount++; 
+              if (item.id !== undefined) await deleteIDBItem(item.id);
+            } else {
+              const retries = (item.retryCount || 0) + 1;
+              if (retries >= 3) {
+                console.warn("Item antrean offline ditolak berulang kali oleh server, menghapus dari IndexedDB:", item);
+                if (item.id !== undefined) await deleteIDBItem(item.id);
+              } else {
+                item.retryCount = retries;
+                await updateIDBItem(item);
+              }
+            }
+          } catch (err) { 
+            break; 
+          }
+        }
+
+        const remainingQueue = await getIDBQueue();
+        setOfflineQueue(remainingQueue); setIsSyncing(false);
+
+        if (successCount > 0) {
+          showNotification('success', 'Sinkronisasi Selesai', `${successCount} data offline berhasil dikirim!`);
+          if (activeTab === 'visit' || activeTab === 'dashboard') fetchVisitData(); 
+        }
+      };
+
+      const handleLogin = async (e) => {
+        e.preventDefault();
+        if (!loginId.trim() || !loginPassword.trim()) return;
+        setIsLoggingIn(true); setLoginError('');
+        try {
+          const res = await callApi('login', { id_user: loginId.trim(), password: loginPassword.trim() });
+
+          if (res && res.status === 'success') {
+            const safeUser = { ...res.user };
+            delete safeUser.password;
+            delete safeUser.PASSWORD;
+            
+            localStorage.setItem('clq_app_user', JSON.stringify(safeUser));
+            setAppUser(safeUser);
+            requestWakeLock();
+
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition((pos) => {
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
+                    const mappedData = { "ID_USER": getUserId(safeUser), "LAT": String(lat), "LON": String(lon), "LAST_UPDATE": getCurrentDateTime() };
+                    callApi('edit_user', { data: mappedData }).catch(() => {});
+                }, () => {}, { enableHighAccuracy: true });
+            }
+          } else { setLoginError(res?.message || 'Login gagal. Periksa ID dan Password Anda.'); }
+        } catch (error) { setLoginError('Koneksi server terputus. Pastikan ada internet.'); } finally { setIsLoggingIn(false); }
+      };
+
+      const executeLogout = () => { 
+        setAppUser(null); 
+        localStorage.removeItem('clq_app_user'); 
+        setLoginId(''); 
+        setLoginPassword(''); 
+        window.location.reload(); 
+      };
+
+      const handleLogout = async () => { 
+        const currentQueue = await getIDBQueue();
+        if (currentQueue.length > 0) {
+          if (isOffline) {
+            showNotification('confirm', 'Mode Offline Aktif', `Ada ${currentQueue.length} kunjungan belum terkirim di IndexedDB. Yakin keluar?`, executeLogout);
+            return;
+          } else {
+            showNotification('info', 'Menyinkronkan...', 'Sedang mengirim data offline...');
+            await syncOfflineQueue();
+            const remaining = await getIDBQueue();
+            if (remaining.length > 0) {
+               showNotification('confirm', 'Gagal Kirim', `Masih ada ${remaining.length} data gagal terkirim. Tetap keluar?`, executeLogout);
+               return;
+            } else closeNotification();
+          }
+        }
+        executeLogout();
+      };
+
+      const handleSaveProfile = async (e) => {
+        e.preventDefault();
+        if (!userFormData.foto_user) { showNotification('warning', 'Data Wajib', 'Foto Profil wajib diisi!'); return; }
+        setIsSavingUser(true);
+        try {
+          const mappedData = { 
+            "ID_USER": userFormData.id_user, 
+            "NAMA_USER": userFormData.nama_user, 
+            "LEVEL_USER": userFormData.level_user, 
+            "JABATAN": userFormData.jabatan || '', 
+            "LAT": userFormData.lat || '', 
+            "LON": userFormData.lon || '', 
+            "LAST_UPDATE": userFormData.last_update || '', 
+            "FOTO_USER": userFormData.foto_user || '' 
+          };
+          
+          if (userFormData.password && userFormData.password.trim() !== "") {
+             mappedData["PASSWORD"] = userFormData.password.trim();
+          }
+
+          const res = await callApi('edit_user', { data: mappedData });
+          
+          if (res && res.status === 'success') {
+            showNotification('success', 'Sukses', "Profil berhasil diperbarui!"); 
+            setShowUserForm(false);
+            
+            const updatedUser = { 
+              ...appUser, 
+              id_user: userFormData.id_user,
+              nama_user: userFormData.nama_user,
+              level_user: userFormData.level_user,
+              jabatan: userFormData.jabatan,
+              foto_user: userFormData.foto_user 
+            };
+            
+            delete updatedUser.PASSWORD;
+            delete updatedUser.password;
+            localStorage.setItem('clq_app_user', JSON.stringify(updatedUser));
+            setAppUser(updatedUser);
+          } else throw new Error(res?.message || 'Gagal menyimpan profil.');
+        } catch (error) { showNotification('error', 'Gagal', error.message); } finally { setIsSavingUser(false); }
+      };
+
+      const handleGlobalRefresh = () => {
+        fetchAppConfigAndParams();
+        if (activeTab === 'dashboard') {
+          fetchDashboardStats();
+          handleFetchReport();
+        } else if (activeTab === 'visit' || activeTab === 'visit_form') {
+          fetchVisitData();
+        } else if (activeTab === 'users') {
+          if (!isOffline && offlineQueue.length > 0) syncOfflineQueue();
+        }
+      };
+
+      useEffect(() => {
+        let isMounted = true;
+        const initAuth = async () => { 
+            try { 
+                await signInAnonymously(auth); 
+            } catch (err) { 
+                if (isMounted) { setUser({ uid: 'mode-sandbox' }); setLoading(false); }
+            } 
+        };
+        initAuth(); 
+        
+        let unsubscribe = () => {};
+        try {
+            unsubscribe = onAuthStateChanged(auth, (u) => { 
+                if (isMounted) {
+                    if(u) { setUser(u); } 
+                    else { setUser(prev => (prev && prev.uid === 'mode-sandbox') ? prev : { uid: 'mode-sandbox' }); }
+                    setLoading(false); 
+                }
+            }); 
+        } catch(e) {
+            if(isMounted) { setUser({ uid: 'mode-sandbox' }); setLoading(false); }
+        }
+
+        return () => { isMounted = false; unsubscribe(); };
+      }, []);
+
+      useEffect(() => {
+        const initOfflineQueue = async () => {
+          const currentQueue = await getIDBQueue();
+          setOfflineQueue(currentQueue);
+        };
+
+        initOfflineQueue();
+
+        const handleOnline = () => setIsOffline(false); const handleOffline = () => setIsOffline(true);
+        window.addEventListener('online', handleOnline); window.addEventListener('offline', handleOffline);
+        return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
+      }, []);
+
+      useEffect(() => { if (!isOffline && offlineQueue.length > 0 && !isSyncing) syncOfflineQueue(); }, [isOffline, offlineQueue.length]);
+
+      useEffect(() => {
+        if (!appUser || !user) return;
+        const pushLocationToCloud = async () => {
+          if (isOffline) return; 
+          if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition((pos) => {
+              try {
+                 const lat = pos.coords.latitude; const lng = pos.coords.longitude; 
+                 const timestamp = Date.now(); 
+                 const dateStr = getLocalDateStr(); 
+                 const userName = getUserName(appUser) || "Petugas"; 
+                 const userId = getUserId(appUser).toUpperCase(); 
+
+                 if (!userId) return;
+
+                 if (user.uid !== 'mode-sandbox') {
+                    setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'locations', userId), { userId, userName, lat, lng, timestamp }).catch(e=>{});
+                    addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'routes'), { userId, userName, lat, lng, timestamp, dateStr }).catch(e=>{});
+                 }
+                 
+                 const mappedData = { "ID_USER": userId, "LAT": String(lat), "LON": String(lng), "LAST_UPDATE": getCurrentDateTime() };
+                 callApi('edit_user', { data: mappedData }).catch(() => {});
+
+              } catch (e) { console.error("Error push GPS", e) }
+            }, () => {}, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+          }
+        };
+        
+        pushLocationToCloud(); 
+        const interval = setInterval(pushLocationToCloud, 60000); 
+        
+        const handleVisibilityChange = () => { if (document.visibilityState === 'visible') pushLocationToCloud(); };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => { 
+            clearInterval(interval); 
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+      }, [appUser, user, isOffline]);
+
+      // Load initial config parameters (Menghapus total link CSV statis)
+      useEffect(() => { fetchAppConfigAndParams(); }, []);
+
+      useEffect(() => {
+        if (activeTab === 'visit' || activeTab === 'visit_form') {
+           if (parameters.kondisiRumah.length === 0) {
+              fetchAppConfigAndParams();
+           }
+        }
+      }, [activeTab]);
+
+      useEffect(() => {
+        if (activeTab === 'users' && appUser) {
+          const currentPhoto = appUser.foto_user || appUser['foto user'] || appUser.foto || appUser.photo;
+          if (!currentPhoto) showNotification('warning', 'Foto Profil Wajib', 'Foto profil Anda masih kosong. Silakan Edit untuk mengunggah.');
+        }
+      }, [activeTab, appUser]);
+
+      useEffect(() => {
+        if (activeTab === 'visit_form') {
+          setLocationData({ lat: null, lng: null, address: 'Mencari lokasi...', addressObj: null });
+          if ("geolocation" in navigator) {
+            navigator.geolocation.getCurrentPosition(
+              async (position) => {
+                const lat = position.coords.latitude; const lng = position.coords.longitude;
+                try {
+                  const resArcgis = await fetch(`https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?f=pjson&location=${lng},${lat}`); const dataArcgis = await resArcgis.json();
+                  if (dataArcgis && dataArcgis.address) {
+                    const addr = dataArcgis.address; const jalan = addr.Address || addr.Neighborhood || addr.ShortLabel || ""; const kota = [addr.District, addr.City, addr.Region, addr.Postal].filter(Boolean).join(', ');
+                    setLocationData({ lat, lng, address: [jalan, kota, "Indonesia"].filter(Boolean).join(', '), addressObj: addr }); return;
+                  }
+                } catch (e) {}
+                try {
+                  const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, { headers: { 'Accept-Language': 'id-ID,id' } });
+                  if (res.ok) { const data = await res.json(); setLocationData({ lat, lng, address: data.display_name, addressObj: data.address }); return; }
+                } catch (e) {}
+                try {
+                  const fallbackRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=id`); const fallbackData = await fallbackRes.json();
+                  const parts = [fallbackData.locality, fallbackData.city, fallbackData.principalSubdivision, fallbackData.postcode, fallbackData.countryName].filter(Boolean);
+                  setLocationData({ lat, lng, address: [...new Set(parts)].join(', '), addressObj: fallbackData });
+                } catch (fallbackErr) { setLocationData({ lat, lng, address: 'Sinyal GPS didapat, tapi gagal memuat nama jalan (Offline)', addressObj: null }); }
+              },
+              (error) => { setLocationData({ lat: '-', lng: '-', address: 'Akses GPS ditolak / Gagal', addressObj: null }); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 15000 }
+            );
+          } else setLocationData({ lat: '-', lng: '-', address: 'GPS tidak didukung perangkat ini', addressObj: null });
+        }
+      }, [activeTab]);
+
+      useEffect(() => { 
+        if (activeTab === 'dashboard') {
+          fetchDashboardStats();
+          handleFetchReport();
+        }
+        if (activeTab === 'visit') fetchVisitData(); 
+      }, [activeTab, appUser]);
+
+      if (!user || loading) return (
+        <div className="h-screen flex items-center justify-center bg-slate-50 p-6 text-center font-sans">
+          <div className="space-y-4"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mx-auto" /><p className="text-slate-500 font-bold">Menyiapkan Aplikasi Lapangan...</p></div>
+        </div>
+      );
+
+      if (!appUser) return (
+        <div className="min-h-screen bg-gradient-to-b from-blue-700 to-blue-900 flex flex-col justify-center items-center p-6 font-sans md:p-12">
+          <div className="w-full max-w-sm md:max-w-md bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-white/10 space-y-6">
+            <img src="https://drive.google.com/thumbnail?id=1qDaQ3F_0RDvC8GY8JQ1AKMEFYiiB-sgy&sz=w400" alt="Logo BTN" className="w-20 h-20 md:w-24 md:h-24 mx-auto mb-2 object-contain bg-slate-50 p-2 rounded-3xl shadow-md border border-gray-100" onError={(e) => { e.target.onerror = null; e.target.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Bank_BTN_logo.svg/512px-Bank_BTN_logo.svg.png"; }} />
+            <div className="text-center space-y-1">
+              <h1 className="text-xl md:text-2xl font-black text-slate-800 leading-tight whitespace-nowrap tracking-tight">Cluster Loan Quality</h1>
+              <p className="text-xs font-bold text-blue-600 uppercase tracking-widest">Mobile Visit App</p>
+            </div>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400 ml-2">ID Petugas</label>
+                <div className="relative mt-1">
+                  <UserCircle className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input type="text" value={loginId} onChange={(e) => setLoginId(e.target.value)} placeholder="Contoh: P001" className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all font-bold text-slate-700" />
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400 ml-2">Password</label>
+                <div className="relative mt-1">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                  <input type="password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="Masukkan Password" className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all font-bold text-slate-700" />
+                </div>
+              </div>
+              {loginError && (
+                 <div className="bg-red-50 border border-red-100 p-3 rounded-xl flex items-start gap-2"><AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" /><p className="text-xs text-red-700 font-medium leading-relaxed">{loginError}</p></div>
+              )}
+              <button type="submit" disabled={isLoggingIn} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-200 active:scale-95 transition-all flex justify-center items-center gap-2 cursor-pointer mt-2">
+                {isLoggingIn ? <><Loader2 className="w-4 h-4 animate-spin"/> Memeriksa...</> : 'Masuk Aplikasi'}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 md:pb-32 font-sans max-w-md mx-auto shadow-2xl ring-1 ring-gray-200 flex flex-col relative overflow-hidden">
+          
+          {/* MODAL PREVIEW FOTO */}
+          {previewPhoto && (
+            <div className="fixed inset-0 z-[9999999] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setPreviewPhoto(null)}>
+              <div className="relative w-full max-w-sm h-auto max-h-[90vh] flex flex-col items-center justify-center" onClick={e => e.stopPropagation()}>
+                <button onClick={() => setPreviewPhoto(null)} className="absolute -top-14 right-0 text-white hover:text-red-400 bg-slate-800 rounded-full p-2.5 transition-colors cursor-pointer shadow-lg">
+                  <X className="w-6 h-6" />
+                </button>
+                <div className="bg-slate-950 p-2 rounded-3xl w-full flex justify-center items-center overflow-hidden border border-slate-800">
+                   <img src={getDisplayImageUrl(previewPhoto)} alt="Preview Kunjungan" className="w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl" />
+                </div>
+                <a href={previewPhoto} target="_blank" rel="noopener noreferrer" className="mt-4 text-blue-400 hover:text-blue-300 text-xs font-bold flex items-center gap-1.5 transition-colors bg-slate-900 px-5 py-2.5 rounded-full shadow-lg">
+                   Buka resolusi penuh <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL NOTIF */}
+          {modalConfig.isOpen && (
+            <div className="fixed inset-0 z-[9999998] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2.5rem] p-6 md:p-8 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col items-center text-center border border-gray-100">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${modalConfig.type === 'success' ? 'bg-green-100 text-green-500' : modalConfig.type === 'error' ? 'bg-red-100 text-red-500' : modalConfig.type === 'warning' ? 'bg-amber-100 text-amber-500' : 'bg-blue-100 text-blue-500'}`}>
+                  {modalConfig.type === 'success' && <CheckCircle className="w-8 h-8" />}
+                  {(modalConfig.type === 'error' || modalConfig.type === 'warning') && <AlertCircle className="w-8 h-8" />}
+                  {modalConfig.type === 'confirm' && <Info className="w-8 h-8" />}
+                </div>
+                <h3 className="text-xl font-black text-slate-800 mb-2">{modalConfig.title}</h3>
+                <p className="text-sm text-slate-500 font-medium mb-6 leading-relaxed">{modalConfig.message}</p>
+                <div className="w-full flex gap-3">
+                  {modalConfig.type === 'confirm' ? (
+                    <>
+                      <button onClick={closeNotification} className="flex-1 bg-gray-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-gray-200 transition-colors">Batal</button>
+                      <button onClick={() => { if(modalConfig.onConfirm) modalConfig.onConfirm(); closeNotification(); }} className="flex-1 bg-red-500 text-white font-bold py-4 rounded-2xl hover:bg-red-600 shadow-lg shadow-red-200 transition-colors">Ya, Lanjutkan</button>
+                    </>
+                  ) : (
+                    <button onClick={closeNotification} className="w-full bg-blue-600 text-white font-black uppercase tracking-wider text-sm py-4 rounded-2xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-colors">Mengerti</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL USER FORM */}
+          {showUserForm && (
+            <div className="fixed inset-0 z-[9999997] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
+              <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-300 border border-gray-100">
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-black text-slate-800">Ubah Profil</h3>
+                  <button onClick={() => setShowUserForm(false)} className="text-slate-400 hover:text-red-500 transition-colors bg-slate-100 p-1.5 rounded-full"><X className="w-5 h-5"/></button>
+                </div>
+                <div className="flex flex-col items-center mb-6">
+                  <div className="relative w-24 h-24 rounded-full overflow-hidden border-4 border-slate-50 shadow-md group bg-slate-100">
+                    {userFormData.foto_user ? (<img src={userFormData.foto_user} alt="Profile Preview" className="w-full h-full object-cover" />) : (<div className="w-full h-full text-slate-300 flex items-center justify-center"><UserCircle className="w-16 h-16" /></div>)}
+                    <label htmlFor="input_foto_profil" className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                      <Camera className="w-8 h-8 text-white" />
+                    </label>
+                    <input id="input_foto_profil" type="file" accept="image/*" className="hidden" onClick={(e) => (e.target.value = null)} onChange={handleProfilePhoto} />
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-3">Ketuk foto untuk mengubah</p>
+                </div>
+                <form onSubmit={handleSaveProfile} className="space-y-4">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400 ml-1">ID Petugas</label>
+                    <input type="text" value={userFormData.id_user} readOnly className="w-full mt-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 font-bold text-sm outline-none cursor-not-allowed opacity-70" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400 ml-1">Nama Lengkap</label>
+                    <input type="text" value={userFormData.nama_user} readOnly className="w-full mt-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-slate-600 font-bold text-sm outline-none cursor-not-allowed opacity-70" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400 ml-1">Password Baru / Ubah Password <span className="font-normal text-slate-400 lowercase">(Kosongkan jika tak diubah)</span></label>
+                    <input type="text" value={userFormData.password} onChange={(e) => setUserFormData({...userFormData, password: e.target.value})} className="w-full mt-1.5 px-4 py-3.5 border rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-blue-50/50 border-blue-200" placeholder="Ketik sandi baru..." />
+                  </div>
+                  <div className="pt-4 flex gap-3">
+                    <button type="button" onClick={() => setShowUserForm(false)} className="flex-1 bg-gray-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-gray-200 transition-colors">Batal</button>
+                    <button type="submit" disabled={isSavingUser} className="flex-1 bg-blue-600 text-white font-bold py-4 rounded-2xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all disabled:bg-blue-400 flex justify-center items-center gap-2">
+                      {isSavingUser ? <><Loader2 className="w-4 h-4 animate-spin"/> Loading...</> : 'Simpan Profil'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* HEADER UTAMA */}
+          <header className="bg-gradient-to-r from-blue-700 to-blue-800 text-white p-4 sticky top-0 z-30 shadow-md border-b border-blue-600/20">
+            <div className="flex justify-between items-center">
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-3">
+                  <img src="https://drive.google.com/thumbnail?id=1qDaQ3F_0RDvC8GY8JQ1AKMEFYiiB-sgy&sz=w400" alt="Logo BTN" className="w-14 h-14 md:w-16 md:h-16 object-contain bg-white p-1.5 rounded-2xl shadow-sm shrink-0" onError={(e) => { e.target.onerror = null; e.target.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Bank_BTN_logo.svg/512px-Bank_BTN_logo.svg.png"; }} />
+                  <div className="flex flex-col justify-center">
+                    <h1 className="text-xs sm:text-sm md:text-base font-black italic tracking-tight leading-tight text-white whitespace-nowrap">Cluster Loan Quality</h1>
+                    <p className="text-[9px] text-blue-200 font-black uppercase tracking-widest mt-0.5">Mobile Visit App</p>
+                    <p className="text-xs text-white font-black italic uppercase tracking-widest leading-none mt-1.5">{clusterName}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col items-end gap-2">
+                <div className="flex gap-1.5">
+                  <button 
+                    className={`p-2 rounded-xl transition-all border shadow-sm ${isTrackingActive ? 'bg-amber-500 hover:bg-amber-600 border-amber-400' : 'bg-slate-500 hover:bg-slate-600 border-slate-400'}`} 
+                    title="Mode Layar Terjaga" 
+                    onClick={toggleTrackingMode}
+                  >
+                    {isTrackingActive ? <Sun className="w-4 h-4 text-white animate-pulse" /> : <Moon className="w-4 h-4 text-white" />}
+                  </button>
+                  <button className="p-2 bg-blue-600/80 hover:bg-blue-500/80 rounded-xl transition-all border border-blue-400/30" title="Refresh" onClick={handleGlobalRefresh}>
+                    <RefreshCw className={`w-4 h-4 text-white ${isFetchingStats || isFetchingVisit ? 'animate-spin' : ''}`} />
+                  </button>
+                  <button onClick={handleLogout} className="p-2 bg-red-500 hover:bg-red-600 rounded-xl transition-all border border-red-400/30 shadow-sm" title="Logout"><LogOut className="w-4 h-4 text-white" /></button>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-white bg-blue-900/40 px-2.5 py-1 rounded-full border border-blue-600/30">
+                  {(appUser?.foto_user || appUser?.['foto user'] || appUser?.foto || appUser?.photo) ? (
+                     <img src={appUser.foto_user || appUser['foto user'] || appUser.foto || appUser.photo} alt="Avatar" className="w-5 h-5 rounded-full object-cover border border-blue-400 shadow-sm" />
+                  ) : (
+                     <div className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center border border-blue-400 shadow-sm">
+                        <span className="text-[10px] text-white font-black">{(getUserName(appUser) || "P").charAt(0).toUpperCase()}</span>
+                     </div>
+                  )}
+                  <span className="truncate max-w-[120px]">{getUserName(appUser) || "Petugas"}</span>
+                </div>
+              </div>
+            </div>
+          </header>
+
+          {/* BANNER OFFLINE */}
+          {(isOffline || offlineQueue.length > 0) && (
+            <div className={`w-full px-4 py-3 text-[10px] font-bold flex justify-between items-center z-20 shadow-md animate-in slide-in-from-top-2 sticky top-[72px] transition-colors ${isOffline ? 'bg-amber-500 text-amber-50' : 'bg-blue-600 text-white'}`}>
+              <div className="flex items-center gap-2">
+                {isOffline ? <AlertCircle className="w-4 h-4" /> : <Database className="w-4 h-4" />}
+                <span className="leading-tight">
+                   {isOffline ? 'MODE OFFLINE AKTIF' : 'KONEKSI KEMBALI NORMAL'} 
+                   <br />
+                   <span className="font-medium opacity-90">{offlineQueue.length} kunjungan menunggu dikirim</span>
+                </span>
+              </div>
+              {offlineQueue.length > 0 && !isOffline && (
+                <button onClick={syncOfflineQueue} disabled={isSyncing} className="bg-white/20 hover:bg-white/30 px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shrink-0">
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} /> 
+                  <span>{isSyncing ? 'Proses...' : 'Sync'}</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* KONTEN UTAMA */}
+          <main className="p-4 flex-1 pb-28">
+            {activeTab === 'dashboard' && (
+              <div className="space-y-6 animate-in fade-in duration-500">
+                <div className="flex flex-col gap-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center">
+                      <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">Target Kunjungan</p>
+                      {isFetchingStats ? <Loader2 className="w-5 h-5 animate-spin text-blue-500 mt-1" /> : (
+                        <div className="flex flex-col gap-1">
+                          <p className="text-2xl font-black text-slate-800 leading-none">{dashboardStats.target}</p>
+                          <p className="text-[10px] font-bold text-slate-400 leading-none truncate">Rp {formatUang(dashboardStats.targetRp)}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center">
+                      <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">Sudah Dikunjungi</p>
+                      {isFetchingStats ? <Loader2 className="w-5 h-5 animate-spin text-green-500 mt-1" /> : (
+                        <div className="flex flex-col gap-1">
+                          <p className="text-2xl font-black text-emerald-600 leading-none">{dashboardStats.dikunjungi}</p>
+                          <p className="text-[10px] font-bold text-emerald-600 leading-none truncate">Rp {formatUang(dashboardStats.dikunjungiRp)}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-5 rounded-[2rem] shadow-xl shadow-blue-100 flex items-center gap-4 text-white">
+                    <div className="bg-white/10 p-3.5 rounded-2xl backdrop-blur-md border border-white/10"><Users className="w-6 h-6" /></div>
+                    <div className="flex-1 flex flex-col justify-center h-full">
+                      <p className="text-xs text-blue-100 font-medium">Debitur Belum di Visit</p>
+                      {isFetchingStats ? <Loader2 className="w-6 h-6 animate-spin text-white mt-1" /> : (
+                        <div className="flex justify-between items-end mt-1.5">
+                          <p className="text-3xl font-black leading-none">{dashboardStats.belum} <span className="text-xs font-normal tracking-wide text-blue-200">Nasabah</span></p>
+                          <p className="text-xs font-bold text-yellow-300 leading-none mb-0.5 bg-yellow-400/10 px-2.5 py-1 rounded-full border border-yellow-400/20">Rp {formatUang(dashboardStats.belumRp)}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* --- LAPORAN KUNJUNGAN / RIWAYAT VISIT HARI INI --- */}
+                <section className="pt-2 pb-4">
+                  <div className="mb-4 flex justify-between items-center">
+                    <h2 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="w-5 h-5 text-blue-500" /> Riwayat Visit Hari Ini</h2>
+                  </div>
+
+                  <div className="space-y-3">
+                    {isFetchingReport ? (
+                      <div className="text-center py-6 bg-white rounded-2xl border border-gray-100"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></div>
+                    ) : Object.keys(groupedReportData).length > 0 ? (
+                      Object.entries(groupedReportData).map(([lokasi, items]) => (
+                        <div key={lokasi} className="border border-slate-100 rounded-[2rem] overflow-hidden shadow-sm bg-white">
+                          <button onClick={() => toggleReportLokasi(lokasi)} className="w-full flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100/80 transition-colors">
+                            <span className="font-bold text-slate-800 text-sm tracking-wide">{lokasi}</span>
+                            <div className="flex items-center gap-2"><span className="text-[10px] bg-blue-50 text-blue-700 px-2.5 py-1 rounded-xl font-black">{items.length} Data</span><ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${expandedReportLokasi[lokasi] ? 'rotate-180' : ''}`} /></div>
+                          </button>
+                          {expandedReportLokasi[lokasi] && (
+                            <div className="p-3 grid grid-cols-1 gap-3 bg-white border-t border-slate-50">
+                              {items.map((row, idx) => {
+                                const fotoRumah = row['foto rumah'] || row.foto_rumah || '';
+                                const fotoTindakan = row['foto tindakan'] || row.foto_tindakan || '';
+                                return (
+                                  <div key={idx} className="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col gap-3 shadow-sm hover:border-blue-300 transition-colors">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <span className="font-black text-slate-800 text-sm">{String(row.tanggal || '').split(' ')[0]}</span>
+                                            <span className="text-[10px] text-slate-500 font-bold ml-2">{String(row.tanggal || '').split(' ')[1] || ''}</span>
+                                        </div>
+                                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${['1', '2'].includes(row.kol_tdy) ? 'bg-amber-100 text-amber-700' : row.kol_tdy && row.kol_tdy !== '-' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                                            KOL {row.kol_tdy || '-'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <h3 className="font-black text-slate-800 tracking-widest text-sm">{row.acctno}</h3>
+                                        <p className="font-bold text-slate-600 text-sm truncate">{row.sname}</p>
+                                        <p className="text-[10px] font-bold text-slate-400 flex items-start gap-1.5 mt-1 leading-tight"><MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-500"/> <span className="line-clamp-2 text-slate-500">{row.alamat_agunan !== '-' ? row.alamat_agunan : row.lpdloc}</span></p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-50 pt-3">
+                                        <div>
+                                            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-0.5">Kondisi & Tindakan</p>
+                                            <p className="font-bold text-slate-700 leading-tight">{row['kondisi rumah'] || '-'} <br/> <span className="text-amber-600">{row.tindakan || '-'}</span></p>
+                                            <p className="text-[10px] text-slate-400 font-medium italic mt-1 line-clamp-2">"{row.catatan || '-'}"</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-0.5">Sisa Pokok & Tgk</p>
+                                            <p className="font-black text-red-600 leading-tight">Rp {formatUang(row.so_pokok_tdy)}</p>
+                                            <p className="font-bold text-slate-500 mt-0.5 leading-tight">Rp {formatUang(row.tgk_angsuran)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between items-center border-t border-slate-50 pt-3">
+                                        <div className="flex gap-2">
+                                            {fotoRumah && <button onClick={() => setPreviewPhoto(fotoRumah)} className="bg-blue-50 hover:bg-blue-100 text-blue-600 p-2 rounded-xl transition-all" title="Foto Rumah"><ImageIcon className="w-4 h-4"/></button>}
+                                            {fotoTindakan && <button onClick={() => setPreviewPhoto(fotoTindakan)} className="bg-purple-50 hover:bg-purple-100 text-purple-600 p-2 rounded-xl transition-all" title="Foto Tindakan"><ImageIcon className="w-4 h-4"/></button>}
+                                            {(!fotoRumah && !fotoTindakan) && <span className="text-[10px] text-slate-400 font-medium italic py-1">Tanpa Foto</span>}
+                                        </div>
+                                        <div className="text-right">
+                                             <p className="text-[9px] text-slate-400 uppercase font-bold tracking-widest mb-0.5">Janji Bayar</p>
+                                             <p className="font-black text-amber-600">{row['tgl janji bayar'] || row.tgl_janji_bayar || '-'}</p>
+                                        </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-6 text-slate-400 text-sm font-medium bg-white rounded-[2rem] border border-slate-100 shadow-sm">Belum ada kunjungan yang direkam hari ini.</div>
+                    )}
+                  </div>
+                </section>
+
+                <section>
+                  <div className="mb-4"><h2 className="font-bold text-slate-800">Tugas Prioritas Anda</h2></div>
+                  <div className="grid grid-cols-1 gap-3">
+                    {isFetchingStats ? <div className="text-center py-6"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></div> : priorityTasks.length > 0 ? (
+                      priorityTasks.map((c, idx) => (
+                        <div key={idx} onClick={() => {
+                            setActiveVisitCustomer(c);
+                            setVisitFormData({ "TANGGAL": getCurrentDateTime(), "KONDISI RUMAH": "", "BERTEMU DENGAN": "", "RUKOS": "", "TINDAKAN": "", "TGL JANJI BAYAR": "", "CATATAN": "", "KONTAK HP BARU": "", "FOTO RUMAH": "", "FOTO TINDAKAN": "", "ACCTNO": getAcct(c), "ID_USER": getUserId(appUser) });
+                            setActiveTab('visit_form');
+                          }} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center justify-between cursor-pointer hover:border-blue-400 hover:shadow-md transition-all active:scale-[0.98] shadow-sm">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-white shadow-sm ${c.kolVal >= 3 ? 'bg-red-500' : 'bg-amber-500'}`}>
+                              {(getUserName(c) || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-sm text-slate-700 truncate max-w-[140px]">{getUserName(c) || 'Tanpa Nama'}</h3>
+                              <p className="text-[10px] text-slate-400 font-bold tracking-widest">{getAcct(c)}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-black text-slate-800">Rp {formatUang(c.pokokVal)}</p>
+                            <span className={`inline-block mt-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${c.kolVal >= 3 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>KOL {c.kol_tdy || '-'}</span>
+                          </div>
+                        </div>
+                      ))
+                    ) : <div className="text-center py-6 text-slate-400 text-sm font-medium bg-white rounded-2xl border border-slate-100 shadow-sm">Tidak ada tugas prioritas.</div>}
+                  </div>
+                </section>
+
+                {/* --- DEBITUR SUDAH BAYAR --- */}
+                <section className="pt-4 pb-2">
+                  <div className="flex justify-between items-center mb-4">
+                    <h2 className="font-bold text-slate-800">Debitur Sudah Bayar</h2>
+                    <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2.5 py-1 rounded-xl uppercase tracking-widest">{bayarData.length} Nasabah</span>
+                  </div>
+                  {isFetchingStats ? (
+                    <div className="text-center py-6"><Loader2 className="w-6 h-6 animate-spin mx-auto text-green-500" /></div>
+                  ) : bayarData.length > 0 ? (
+                    <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs whitespace-nowrap min-w-[500px]">
+                          <thead className="bg-emerald-50/60 text-emerald-800 font-bold uppercase tracking-wider text-[10px] border-b border-emerald-100">
+                            <tr><th className="px-4 py-3.5">No. Rekening</th><th className="px-4 py-3.5">Nama Debitur</th><th className="px-4 py-3.5">Lokasi</th><th className="px-4 py-3.5 text-center">KOL</th><th className="px-4 py-3.5 text-right">Sisa Pokok</th></tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50 text-slate-700 font-medium">
+                            {bayarData.map((b, idx) => (
+                              <tr key={idx} className="hover:bg-emerald-50/20 transition-colors group">
+                                <td className="px-4 py-3 font-black tracking-widest text-slate-800">{b.acctno}</td><td className="px-4 py-3 font-bold">{b.sname}</td>
+                                <td className="px-4 py-3"><span className="flex items-center gap-1.5 text-slate-600"><MapPin className="w-3.5 h-3.5 text-blue-500 group-hover:text-blue-600 transition-colors"/> {b.lpdloc}</span></td>
+                                <td className="px-4 py-3 text-center"><span className={`inline-block px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${['1', '2'].includes(b.kol_tdy) ? 'bg-amber-100 text-amber-700' : b.kol_tdy !== '-' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-slate-600'}`}>{b.kol_tdy === '-' ? '-' : `KOL ${b.kol_tdy}`}</span></td>
+                                <td className="px-4 py-3 text-right font-black text-emerald-600">Rp {formatUang(b.so_pokok_tdy)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-slate-400 text-sm font-medium bg-white rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center gap-2">
+                      <CheckCircle className="w-8 h-8 text-slate-200" />
+                      Belum ada data bayar.
+                    </div>
+                  )}
+                </section>
+              </div>
+            )}
+
+            {activeTab === 'visit' && (
+              <div className="space-y-4 animate-in slide-in-from-right-4 duration-300">
+                <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800">Daftar Visit</h2>
+                    <p className="text-xs text-slate-400 mt-1">Nasabah pending untuk Anda.</p>
+                  </div>
+                  <button onClick={fetchVisitData} className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 transition-all font-bold flex items-center gap-2">
+                    <RefreshCw className={`w-5 h-5 ${isFetchingVisit ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+
+                <div className="space-y-3 pb-28">
+                  {isFetchingVisit ? (
+                    <div className="text-center py-10"><Loader2 className="w-8 h-8 animate-spin mx-auto text-blue-500" /><p className="text-sm text-slate-400 mt-2 font-medium">Memuat data visit...</p></div>
+                  ) : Object.keys(groupedVisitData).length > 0 ? (
+                    Object.entries(groupedVisitData).map(([lokasi, items]) => (
+                      <div key={lokasi} className="border border-slate-100 rounded-[2rem] overflow-hidden shadow-sm bg-white">
+                        <button onClick={() => toggleVisitLokasi(lokasi)} className="w-full flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100/80 transition-colors">
+                          <span className="font-bold text-slate-800 text-sm tracking-wide">{lokasi}</span>
+                          <div className="flex items-center gap-2"><span className="text-[10px] bg-blue-50 text-blue-700 px-2.5 py-1 rounded-xl font-black">{items.length} Data</span><ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${expandedVisitLokasi[lokasi] ? 'rotate-180' : ''}`} /></div>
+                        </button>
+                        {expandedVisitLokasi[lokasi] && (
+                          <div className="p-3 grid grid-cols-1 gap-3 bg-white border-t border-slate-50">
+                            {items.map((v, idx) => {
+                              const waNumber = formatWhatsAppNumber(v.hp1);
+                              return (
+                              <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-100 flex flex-col justify-between shadow-sm hover:border-blue-300 transition-all">
+                                <div>
+                                  <div className="flex justify-between items-start">
+                                    <div>
+                                      <span className="font-black text-slate-800 text-sm tracking-widest">{v.acctno}</span>
+                                      <p className="text-sm font-bold text-slate-700 mt-1">{v.sname}</p>
+                                    </div>
+                                    <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-bold ${['1', '2'].includes(v.kol_tdy) ? 'bg-amber-100 text-amber-700' : v.kol_tdy && v.kol_tdy !== '-' ? 'bg-red-100 text-red-700' : 'bg-gray-200 text-slate-600'}`}>
+                                      KOL {v.kol_tdy || '-'}
+                                   </span>
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-2 gap-y-3 gap-x-2 mt-3 pt-3 border-t border-slate-50">
+                                    <div>
+                                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Tgl Distribusi</p>
+                                      <p className="text-xs font-bold text-slate-700">{v['tgl distribusi'] || '-'}</p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Sisa Pokok</p>
+                                      <p className="text-sm font-black text-red-600">Rp {formatUang(v.so_pokok_tdy)}</p>
+                                    </div>
+                                    <div className="col-span-2 pt-2 border-t border-slate-50 flex justify-between items-center">
+                                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Tgk Angsuran</p>
+                                      <p className="text-sm font-bold text-slate-700">Rp {formatUang(v.tgk_angsuran)}</p>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="mt-2 pt-3 border-t border-slate-50">
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Alamat Agunan</p>
+                                    <div className="flex items-start gap-1.5 text-xs font-bold text-slate-700 leading-snug">
+                                      <MapPin className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                                      <span className="flex-1 text-slate-600">{v.alamat_agunan || '-'}</span>
+                                    </div>
+                                  </div>
+                                  {v.hp1 && (
+                                    <div className="mt-2.5 pt-2.5 border-t border-slate-50 flex items-center gap-1.5 text-xs font-bold text-slate-700">
+                                      <Phone className="w-4 h-4 text-emerald-500" />
+                                      <span className="text-slate-600">{v.hp1}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex gap-2.5 mt-5">
+                                  {waNumber && (
+                                    <a 
+                                      href={`https://wa.me/${waNumber}`} 
+                                      target="_blank" 
+                                      rel="noopener noreferrer"
+                                      className="flex-1 bg-[#25D366] text-white font-black py-3.5 rounded-xl flex justify-center items-center gap-2 active:scale-95 transition-all shadow-md hover:bg-[#128C7E]"
+                                    >
+                                      <MessageSquare className="w-4 h-4" /> WA
+                                    </a>
+                                  )}
+                                  <button 
+                                    onClick={() => {
+                                      setActiveVisitCustomer(v);
+                                      setVisitFormData({
+                                        "TANGGAL": getCurrentDateTime(),
+                                        "KONDISI RUMAH": "",
+                                        "BERTEMU DENGAN": "",
+                                        "RUKOS": "",
+                                        "TINDAKAN": "",
+                                        "TGL JANJI BAYAR": "",
+                                        "CATATAN": "",
+                                        "KONTAK HP BARU": "",
+                                        "FOTO RUMAH": "",
+                                        "FOTO TINDAKAN": "",
+                                        "ACCTNO": v.acctno,
+                                        "ID_USER": getUserId(appUser)
+                                      });
+                                      setActiveTab('visit_form');
+                                    }}
+                                    className={`${waNumber ? 'flex-1' : 'w-full'} bg-blue-600 text-white font-black py-3.5 rounded-xl flex justify-center items-center gap-2 active:scale-95 transition-all shadow-md shadow-blue-200 hover:bg-blue-700`}
+                                  >
+                                    <MapPin className="w-4 h-4" /> VISIT
+                                  </button>
+                                </div>
+                              </div>
+                            );})}
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-10 text-slate-400 text-sm font-medium bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
+                      Belum ada data visit pending untuk Anda.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* --- FORM VISIT ISI --- */}
+            {activeTab === 'visit_form' && activeVisitCustomer && (
+              <div className="space-y-4 animate-in slide-in-from-right-4 duration-300 pb-36 mb-10">
+                <div className="flex flex-col gap-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800">Form Kunjungan</h2>
+                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs">
+                      {locationData.lat && locationData.lat !== '-' ? ( <span className="flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2.5 py-1 rounded-full text-[9px] uppercase tracking-wider border border-emerald-200"><MapPin className="w-3 h-3"/> GPS Siap</span>
+                      ) : locationData.lat === '-' ? ( <span className="flex items-center gap-1 text-red-500 font-bold bg-red-50 px-2.5 py-1 rounded-full text-[9px] uppercase tracking-wider border border-red-200"><AlertCircle className="w-3 h-3"/> GPS Ditolak/Gagal</span>
+                      ) : ( <span className="flex items-center gap-1 text-amber-500 font-bold bg-amber-50 px-2.5 py-1 rounded-full text-[9px] uppercase tracking-wider border border-amber-200"><Loader2 className="w-3 h-3 animate-spin"/> Mencari GPS...</span> )}
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+                  <div className="grid grid-cols-1 gap-y-4 text-xs">
+                    <div className="flex justify-between border-b border-slate-50 pb-2"><div className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Acct No</div><div className="text-slate-800 font-black tracking-widest text-right">{activeVisitCustomer.acctno}</div></div>
+                    <div className="flex justify-between border-b border-slate-50 pb-2"><div className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Nama Debitur</div><div className="text-slate-800 font-black text-right truncate max-w-[60%]">{activeVisitCustomer.sname || getUserName(activeVisitCustomer)}</div></div>
+                    <div className="flex justify-between border-b border-slate-50 pb-2"><div className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Sisa Pokok</div><div className="text-red-600 font-black text-right">Rp {formatUang(activeVisitCustomer.so_pokok_tdy)}</div></div>
+                    <div className="flex justify-between"><div className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">Alamat Agunan</div><div className="text-slate-600 font-bold text-right leading-tight max-w-[60%]">{activeVisitCustomer.alamat_agunan}</div></div>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm grid grid-cols-1 gap-y-5">
+                  <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tanggal Visit</label><input type="text" value={visitFormData["TANGGAL"]} readOnly className="w-full mt-1.5 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 font-bold text-sm cursor-not-allowed" /></div>
+                  <div>
+                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Kondisi Rumah</label>
+                     <div className="relative mt-1.5">
+                       <select value={visitFormData["KONDISI RUMAH"]} onChange={(e) => setVisitFormData(p => ({...p, "KONDISI RUMAH": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
+                         <option value="">-- Pilih Kondisi --</option>
+                         {parameters.kondisiRumah.length > 0 ? parameters.kondisiRumah.map(opt => <option key={opt} value={opt}>{opt}</option>) : <option value="BERPENGHUNI">BERPENGHUNI</option>}
+                       </select>
+                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                     </div>
+                  </div>
+                  <div>
+                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Bertemu Dengan</label>
+                     <div className="relative mt-1.5">
+                       <select value={visitFormData["BERTEMU DENGAN"]} onChange={(e) => setVisitFormData(p => ({...p, "BERTEMU DENGAN": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
+                         <option value="">-- Pilih --</option>
+                         {parameters.bertemuDengan.length > 0 ? parameters.bertemuDengan.map(opt => <option key={opt} value={opt}>{opt}</option>) : <option value="DEBITUR">DEBITUR</option>}
+                       </select>
+                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                     </div>
+                  </div>
+                  <div>
+                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Rukos</label>
+                     <div className="relative mt-1.5">
+                       <select value={visitFormData["RUKOS"]} onChange={(e) => setVisitFormData(p => ({...p, "RUKOS": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
+                         <option value="">-- Pilih --</option>
+                         {parameters.rukos.length > 0 ? parameters.rukos.map(opt => <option key={opt} value={opt}>{opt}</option>) : <option value="MILIK SENDIRI">MILIK SENDIRI</option>}
+                       </select>
+                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                     </div>
+                  </div>
+                  <div>
+                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tindakan</label>
+                     <div className="relative mt-1.5">
+                       <select value={visitFormData["TINDAKAN"]} onChange={(e) => setVisitFormData(p => ({...p, "TINDAKAN": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
+                         <option value="">-- Pilih --</option>
+                         {parameters.tindakan.length > 0 ? parameters.tindakan.map(opt => <option key={opt} value={opt}>{opt}</option>) : <option value="PENAGIHAN">PENAGIHAN</option>}
+                       </select>
+                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                     </div>
+                  </div>
+                  <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tgl Janji Bayar <span className="font-normal text-slate-400">(Opsional)</span></label><input type="date" value={visitFormData["TGL JANJI BAYAR"]} onChange={(e) => setVisitFormData(p => ({...p, "TGL JANJI BAYAR": e.target.value}))} className="w-full mt-1.5 px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" /></div>
+                  <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Catatan <span className="text-red-500">*</span></label><textarea value={visitFormData["CATATAN"]} onChange={(e) => setVisitFormData(p => ({...p, "CATATAN": e.target.value}))} className="w-full mt-1.5 px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" rows="3" placeholder="Isi catatan kunjungan..."></textarea></div>
+                  <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Kontak HP Baru <span className="font-normal text-slate-400">(Opsional)</span></label><input type="tel" value={visitFormData["KONTAK HP BARU"] || ""} onChange={(e) => setVisitFormData(p => ({...p, "KONTAK HP BARU": e.target.value}))} className="w-full mt-1.5 px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Contoh: 08123456789" /></div>
+
+                  {/* Area Foto */}
+                  <div className="flex flex-col h-full mt-2">
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2 block">Foto Rumah <span className="text-red-500">*</span></label>
+                    {visitFormData["FOTO RUMAH"] ? (
+                      <div className="relative w-full rounded-2xl overflow-hidden border-2 border-blue-100 shadow-sm bg-slate-900 flex items-center justify-center">
+                        <img src={visitFormData["FOTO RUMAH"]} alt="Preview Rumah" className="w-full object-contain aspect-[3/4]" />
+                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti<input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} /></label>
+                      </div>
+                    ) : (
+                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Rumah</span><input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} /></label>
+                    )}
+                  </div>
+                  <div className="flex flex-col h-full mt-2">
+                    <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2 block">Foto Tindakan <span className="font-normal text-gray-400">(Opsional)</span></label>
+                    {visitFormData["FOTO TINDAKAN"] ? (
+                      <div className="relative w-full rounded-2xl overflow-hidden border-2 border-blue-100 shadow-sm bg-slate-900 flex items-center justify-center">
+                        <img src={visitFormData["FOTO TINDAKAN"]} alt="Preview Tindakan" className="w-full object-contain aspect-[3/4]" />
+                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti<input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} /></label>
+                      </div>
+                    ) : (
+                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Tindakan</span><input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} /></label>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col gap-3 pt-2">
+                  <button onClick={submitVisitForm} disabled={isSavingVisitForm} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-blue-200 flex justify-center items-center gap-2 active:scale-95 transition-all disabled:bg-blue-300 cursor-pointer">
+                    {isSavingVisitForm ? <span className="flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin"/> Menyimpan...</span> : <span className="flex items-center gap-2"><Save className="w-5 h-5" /> Simpan Visit</span>}
+                  </button>
+                  <button onClick={() => { setActiveTab('visit'); setActiveVisitCustomer(null); }} className="w-full bg-white border-2 border-red-100 text-red-600 font-black py-4 rounded-2xl text-sm uppercase tracking-widest flex justify-center items-center gap-2 hover:bg-red-50 transition-colors cursor-pointer"><X className="w-5 h-5" /> Batal</button>
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'users' && (
+              <div className="space-y-4 animate-in slide-in-from-right-4 duration-300 pb-28">
+                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                   <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-slate-50 shadow-md mb-4 bg-slate-50">
+                     {(appUser?.foto_user || appUser?.['foto user'] || appUser?.foto || appUser?.photo) ? (
+                         <img src={appUser.foto_user || appUser['foto user'] || appUser.foto || appUser.photo} alt="Profil" className="w-full h-full object-cover" />
+                     ) : (<div className="w-full h-full bg-blue-600 text-white flex items-center justify-center font-black text-5xl">{(getUserName(appUser) || "P").charAt(0).toUpperCase()}</div>)}
+                   </div>
+                   <h2 className="text-xl font-black text-slate-800">{getUserName(appUser) || "Tanpa Nama"}</h2>
+                   <p className="text-sm font-bold text-blue-600 tracking-widest mb-1">{getUserId(appUser)}</p>
+                   <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{appUser?.jabatan || appUser?.posisi || 'Petugas Lapangan'}</p>
+
+                   <div className="w-full mt-8 flex flex-col gap-3">
+                      <button onClick={() => { 
+                          setUserFormData({ id_user: getUserId(appUser), nama_user: getUserName(appUser), password: '', level_user: String(getUserLevel(appUser)), jabatan: appUser.jabatan || '', lat: appUser.lat || '', lon: appUser.lon || '', last_update: appUser.last_update || '', foto_user: appUser.foto_user || appUser['foto user'] || '' }); 
+                          setShowUserForm(true); 
+                      }} className="w-full bg-amber-50 hover:bg-amber-100 text-amber-700 font-black py-4 rounded-2xl text-sm uppercase tracking-widest flex justify-center items-center gap-2 transition-colors cursor-pointer">
+                        <Edit className="w-5 h-5" /> Edit Profil Saya
+                      </button>
+                   </div>
+                </div>
+              </div>
+            )}
+
+          </main>
+
+          {/* --- MENU NAVIGASI BAWAH --- */}
+          <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/95 backdrop-blur-md border-t border-slate-100 px-4 py-4 flex justify-around items-center z-[999999] rounded-t-[2.5rem] shadow-[0_-10px_30px_rgba(0,0,0,0.05)] transition-all">
+            <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 transition-all hover:scale-110 cursor-pointer ${activeTab === 'dashboard' ? 'text-blue-600 scale-110 drop-shadow-sm font-bold' : 'text-slate-400 font-medium'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Beranda</span></button>
+            <button onClick={() => setActiveTab('visit')} className={`flex flex-col items-center gap-1 transition-all hover:scale-110 cursor-pointer ${(activeTab === 'visit' || activeTab === 'visit_form') ? 'text-blue-600 scale-110 drop-shadow-sm font-bold' : 'text-slate-400 font-medium'}`}><MapPin className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Visit</span></button>
+            <button onClick={() => setActiveTab('users')} className={`flex flex-col items-center gap-1 transition-all hover:scale-110 cursor-pointer ${activeTab === 'users' ? 'text-blue-600 scale-110 drop-shadow-sm font-bold' : 'text-slate-400 font-medium'}`}><UserCircle className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Profil</span></button>
+          </nav>
+        </div>
+      );
+    }
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(<MobileApp />);
+  </script>
+
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js")
+          .then(reg => console.log("Fitur PWA Berhasil Diaktifkan!", reg))
+          .catch(err => console.log("Gagal memuat Service Worker PWA", err));
+      });
+    }
+  </script>
+</body>
+</html>
