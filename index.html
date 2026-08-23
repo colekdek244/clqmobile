@@ -350,22 +350,25 @@
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
       }, [appUser]);
 
+      // --- PENGOLAHAN FOTO ANTI-CRASH MEMORI ---
       const handleProfilePhoto = async (e) => {
         const file = e.target.files[0];
+        e.target.value = null; // PERBAIKAN: Langsung reset tombol agar memori React aman
         if (!file) return;
+        
         if (!file.type.startsWith('image/')) {
           showNotification('error', 'File Ditolak', 'Hanya format gambar yang diperbolehkan.');
-          e.target.value = null; return;
+          return;
         }
+        
         try {
-          const objectUrl = URL.createObjectURL(file);
-          const img = new Image();
-          await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-            img.src = objectUrl;
-          });
-          URL.revokeObjectURL(objectUrl);
+          let img;
+          if (window.createImageBitmap) { 
+            img = await createImageBitmap(file, { imageOrientation: 'from-image' }); 
+          } else {
+            const dataUrl = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = (ev) => resolve(ev.target.result); reader.readAsDataURL(file); });
+            img = new Image(); await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; });
+          }
           
           const size = Math.min(img.width, img.height);
           const startX = (img.width - size) / 2;
@@ -375,29 +378,29 @@
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, startX, startY, size, size, 0, 0, 120, 120);
           setUserFormData(prev => ({...prev, foto_user: canvas.toDataURL('image/jpeg', 0.6)}));
-          canvas.width = 0; canvas.height = 0;
+          
         } catch (err) { 
-          showNotification('error', 'Gagal Memproses', 'Memori tidak cukup atau format tidak didukung.'); 
-        } finally {
-          e.target.value = null;
+          showNotification('error', 'Gagal Memproses', 'Format gambar tidak didukung atau memori penuh.'); 
         }
       };
 
       const handlePhoto = async (e, field) => {
         const file = e.target.files[0];
+        e.target.value = null; // PERBAIKAN: Langsung reset tombol agar memori React aman
         if (!file) return;
 
         if (file.type.startsWith('image/')) {
           try {
-            const objectUrl = URL.createObjectURL(file);
-            const img = new Image();
-            await new Promise((resolve, reject) => {
-              img.onload = resolve;
-              img.onerror = reject;
-              img.src = objectUrl;
-            });
-            const width = img.width; const height = img.height;
-            URL.revokeObjectURL(objectUrl); // Bebaskan memori RAM seketika!
+            let img; let width, height;
+            // Gunakan createImageBitmap untuk cegah PWA Silent Crash (OOM)
+            if (window.createImageBitmap) { 
+              img = await createImageBitmap(file, { imageOrientation: 'from-image' }); 
+              width = img.width; height = img.height; 
+            } else {
+              const dataUrl = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = (ev) => resolve(ev.target.result); reader.readAsDataURL(file); });
+              img = new Image(); await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; }); 
+              width = img.width; height = img.height;
+            }
 
             const MAX_DIMENSION = 600; let scale = 1;
             if (width > height && width > MAX_DIMENSION) scale = MAX_DIMENSION / width;
@@ -415,6 +418,7 @@
               ctx.fillText(text, x, y);
             };
 
+            // PERBAIKAN: Logo Drive dari kode lama (Ditambah crossOrigin agar lolos PWA CORS)
             const logoUrl = "https://lh3.googleusercontent.com/d/1qDaQ3F_0RDvC8GY8JQ1AKMEFYiiB-sgy"; 
             const logoImg = new Image(); logoImg.crossOrigin = "Anonymous"; 
             await new Promise((resolve) => { logoImg.onload = resolve; logoImg.onerror = resolve; logoImg.src = logoUrl; });
@@ -460,18 +464,15 @@
             ctx.fillStyle = '#fbbf24'; ctx.textBaseline = 'top'; fillTextFit(baris3, padX, block3Y + (blockHeight * 0.70), maxTextW, blockHeight * 0.20, '500');
             ctx.textBaseline = 'alphabetic';
 
-            setVisitFormData(prev => ({...prev, [field]: canvas.toDataURL('image/jpeg', 0.5)}));
-            canvas.width = 0; canvas.height = 0;
+            const finalData = canvas.toDataURL('image/jpeg', 0.6);
+            setVisitFormData(prev => ({...prev, [field]: finalData}));
 
           } catch (err) { 
             console.error(err); 
-            showNotification('error', 'Gagal Memproses Gambar', 'Pastikan perangkat mendukung dan memori cukup.'); 
-          } finally {
-            e.target.value = null; // Mencegah crash jika foto gagal tapi mau foto ulang
+            showNotification('error', 'Gagal Memproses Gambar', 'Pastikan perangkat mendukung fitur ini.'); 
           }
         } else { 
           showNotification('error', 'File Ditolak', 'Hanya format Gambar.'); 
-          e.target.value = null; 
         }
       };
 
@@ -582,9 +583,7 @@
           if(res && res.status === 'success') {
              const rawReports = res.data || [];
              
-             // PERBAIKAN: Menoleransi berbagai jenis header tanggal
              const getRawDate = (r) => r.tanggal || r['tanggal visit'] || r.tanggal_visit || r['tgl visit'] || '';
-             
              rawReports.sort((a,b) => new Date(getRawDate(b) || 0) - new Date(getRawDate(a) || 0));
              
              setReportData(rawReports.map(visit => ({
@@ -690,7 +689,7 @@
 
           if (res && res.status === 'success') {
             showNotification('success', 'Visit Tersimpan', 'Data hasil kunjungan berhasil diunggah.');
-            await fetchVisitData(); setActiveTab('dashboard'); setActiveVisitCustomer(null);
+            await fetchVisitData(); setActiveTab('visit'); setActiveVisitCustomer(null);
           } else throw new Error(res?.message || 'Format respon server tidak valid.');
         } catch (error) { 
           if (error.message && (error.message.includes("Failed to fetch") || error.message.includes("NetworkError") || error.message.includes("Unexpected token"))) await saveToOfflineQueue();
@@ -1084,7 +1083,7 @@
                     <label htmlFor="input_foto_profil" className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                       <Camera className="w-8 h-8 text-white" />
                     </label>
-                    <input id="input_foto_profil" type="file" accept="image/jpeg, image/png, image/jpg" className="opacity-0 absolute w-px h-px z-[-1]" onClick={(e) => (e.target.value = null)} onChange={handleProfilePhoto} />
+                    <input id="input_foto_profil" type="file" accept="image/*" className="opacity-0 absolute w-px h-px z-[-1]" onChange={handleProfilePhoto} />
                   </div>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-3">Ketuk foto untuk mengubah</p>
                 </div>
@@ -1497,7 +1496,7 @@
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm grid grid-cols-1 gap-y-5">
                   <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tanggal Visit</label><input type="text" value={visitFormData["TANGGAL"]} readOnly className="w-full mt-1.5 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 font-bold text-sm cursor-not-allowed" /></div>
                   <div>
-                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Kondisi Rumah</label>
+                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Kondisi Rumah <span className="text-red-500">*</span></label>
                      <div className="relative mt-1.5">
                        <select value={visitFormData["KONDISI RUMAH"]} onChange={(e) => setVisitFormData(p => ({...p, "KONDISI RUMAH": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
                          <option value="">-- Pilih Kondisi --</option>
@@ -1507,7 +1506,7 @@
                      </div>
                   </div>
                   <div>
-                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Bertemu Dengan</label>
+                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Bertemu Dengan <span className="text-red-500">*</span></label>
                      <div className="relative mt-1.5">
                        <select value={visitFormData["BERTEMU DENGAN"]} onChange={(e) => setVisitFormData(p => ({...p, "BERTEMU DENGAN": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
                          <option value="">-- Pilih --</option>
@@ -1517,7 +1516,7 @@
                      </div>
                   </div>
                   <div>
-                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Rukos</label>
+                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Rukos <span className="text-red-500">*</span></label>
                      <div className="relative mt-1.5">
                        <select value={visitFormData["RUKOS"]} onChange={(e) => setVisitFormData(p => ({...p, "RUKOS": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
                          <option value="">-- Pilih --</option>
@@ -1527,7 +1526,7 @@
                      </div>
                   </div>
                   <div>
-                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tindakan</label>
+                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tindakan <span className="text-red-500">*</span></label>
                      <div className="relative mt-1.5">
                        <select value={visitFormData["TINDAKAN"]} onChange={(e) => setVisitFormData(p => ({...p, "TINDAKAN": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
                          <option value="">-- Pilih --</option>
@@ -1546,10 +1545,17 @@
                     {visitFormData["FOTO RUMAH"] ? (
                       <div className="relative w-full rounded-2xl overflow-hidden border-2 border-blue-100 shadow-sm bg-slate-900 flex items-center justify-center">
                         <img src={visitFormData["FOTO RUMAH"]} alt="Preview Rumah" className="w-full object-contain aspect-[3/4]" />
-                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti<input type="file" accept="image/jpeg, image/png, image/jpg" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} /></label>
+                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all">
+                            <Camera className="w-5 h-5"/> Ganti
+                            <input type="file" accept="image/*" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} />
+                        </label>
                       </div>
                     ) : (
-                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Rumah</span><input type="file" accept="image/jpeg, image/png, image/jpg" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} /></label>
+                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]">
+                          <Camera className="w-12 h-12 text-slate-400 transition-colors" />
+                          <span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Rumah</span>
+                          <input type="file" accept="image/*" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} />
+                      </label>
                     )}
                   </div>
                   <div className="flex flex-col h-full mt-2">
@@ -1557,10 +1563,17 @@
                     {visitFormData["FOTO TINDAKAN"] ? (
                       <div className="relative w-full rounded-2xl overflow-hidden border-2 border-blue-100 shadow-sm bg-slate-900 flex items-center justify-center">
                         <img src={visitFormData["FOTO TINDAKAN"]} alt="Preview Tindakan" className="w-full object-contain aspect-[3/4]" />
-                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti<input type="file" accept="image/jpeg, image/png, image/jpg" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} /></label>
+                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all">
+                            <Camera className="w-5 h-5"/> Ganti
+                            <input type="file" accept="image/*" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} />
+                        </label>
                       </div>
                     ) : (
-                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Tindakan</span><input type="file" accept="image/jpeg, image/png, image/jpg" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} /></label>
+                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]">
+                          <Camera className="w-12 h-12 text-slate-400 transition-colors" />
+                          <span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Tindakan</span>
+                          <input type="file" accept="image/*" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} />
+                      </label>
                     )}
                   </div>
                 </div>
