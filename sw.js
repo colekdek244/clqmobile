@@ -1,33 +1,38 @@
-const CACHE_NAME = "clqmobile-v4"; // Naikkan versi cache
+const CACHE_NAME = "clqmobile-v7"; 
 
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
   "/manifest.json",
   "/icons/icon-192.png",
-  "/icons/icon-512.png" // Tambahkan icon 512
+  "https://cdn.tailwindcss.com",
+  "https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;900&display=swap",
+  "https://unpkg.com/@babel/standalone/babel.min.js",
+  "https://esm.sh/react@18.2.0",
+  "https://esm.sh/react-dom@18.2.0/client",
+  "https://esm.sh/lucide-react@0.263.1?external=react",
+  "https://esm.sh/react@18.2.0/jsx-runtime",
+  "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
+  "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
+  "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"
 ];
 
-// Instalasi: Cache aset utama SAJA agar cepat dan tidak gampang error
 self.addEventListener("install", (event) => {
-  self.skipWaiting(); // Paksa SW langsung aktif
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      console.log("[ServiceWorker] Pre-caching HTML dan Aset Dasar...");
-      // Jangan pakai addAll untuk CDN eksternal, rawan gagal install
-      return cache.addAll(ASSETS_TO_CACHE).catch(err => console.error("Cache addAll error:", err)); 
-    })
+      console.log("[ServiceWorker] Pre-caching app shell & CDNs...");
+      return cache.addAll(ASSETS_TO_CACHE);
+    }).then(() => self.skipWaiting())
   );
 });
 
-// Aktivasi: Bersihkan cache versi lama
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cache) => {
           if (cache !== CACHE_NAME) {
-            console.log("[ServiceWorker] Menghapus cache lama:", cache);
+            console.log("[ServiceWorker] Membersihkan cache lama:", cache);
             return caches.delete(cache);
           }
         })
@@ -36,46 +41,41 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Fetch: Ambil dari Cache, kalau tidak ada ambil dari Jaringan
 self.addEventListener("fetch", (event) => {
   const reqUrl = event.request.url;
 
-  // JANGAN cache API dinamis
+  // Jangan simpan request API dinamik (Google Sheets CSV, Apps Script, Geocoding, Firebase DB) ke Cache SW
   if (
+    reqUrl.includes("docs.google.com") ||
     reqUrl.includes("script.google.com") ||
     reqUrl.includes("firestore.googleapis.com") ||
     reqUrl.includes("arcgis.com") ||
     reqUrl.includes("nominatim.openstreetmap.org") ||
     reqUrl.includes("bigdatacloud.net")
   ) {
-    return; // Biarkan browser menangani secara default (jaringan)
+    // Biarkan langsung mengambil data live dari jaringan (Network Only)
+    event.respondWith(fetch(event.request));
+    return;
   }
 
-  // Strategi Cache First, Network Fallback
+  // Untuk file aplikasi & library CDN: Cache First dengan Offline Navigation Fallback
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }
       return fetch(event.request).then((networkResponse) => {
-        // Jangan cache jika error atau tidak sah
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-            if(networkResponse && networkResponse.type === 'cors' && reqUrl.includes('esm.sh')) {
-               // Boleh cache CDN React
-            } else {
-               return networkResponse;
-            }
+        // Mengizinkan tipe response 'basic' (lokal) dan 'cors' (CDN eksternal) untuk disimpan ke cache
+        if (!networkResponse || networkResponse.status !== 200 || (networkResponse.type !== 'basic' && networkResponse.type !== 'cors')) {
+          return networkResponse;
         }
-        
-        // Simpan ke cache untuk akses offline berikutnya
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
         });
-        
         return networkResponse;
       }).catch(() => {
-        // Fallback offline (jika gagal fetch HTML)
+        // Fallback navigasi jika fetch gagal saat membuka halaman dalam kondisi offline
         if (event.request.mode === 'navigate') {
           return caches.match('/index.html') || caches.match('/');
         }
