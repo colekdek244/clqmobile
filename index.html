@@ -239,6 +239,10 @@
           return saved ? JSON.parse(saved) : null;
         } catch(e) { return null; }
       }); 
+
+      // --- STATE UNTUK PWA INSTALL PROMPT ---
+      const [deferredPrompt, setDeferredPrompt] = useState(null);
+      const [showInstallBanner, setShowInstallBanner] = useState(false);
       
       const [loginId, setLoginId] = useState('');
       const [loginPassword, setLoginPassword] = useState('');
@@ -886,6 +890,48 @@
 
       useEffect(() => { if (!isOffline && offlineQueue.length > 0 && !isSyncing) syncOfflineQueue(); }, [isOffline, offlineQueue.length]);
 
+      // --- EVENT LISTENER PWA INSTALL ---
+      useEffect(() => {
+        const handleBeforeInstallPrompt = (e) => {
+          // Mencegah mini-infobar bawaan Chrome muncul
+          e.preventDefault();
+          // Menyimpan event agar bisa dipicu nanti saat tombol diklik
+          setDeferredPrompt(e);
+          // Menampilkan banner kustom kita
+          setShowInstallBanner(true);
+        };
+
+        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+        // Jika PWA sudah sukses terinstal, sembunyikan banner
+        window.addEventListener('appinstalled', () => {
+          setShowInstallBanner(false);
+          setDeferredPrompt(null);
+        });
+
+        return () => {
+          window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        };
+      }, []);
+
+      const handleInstallClick = async () => {
+        if (!deferredPrompt) return;
+        
+        // Sembunyikan banner kita
+        setShowInstallBanner(false);
+        // Tampilkan pop-up instalasi bawaan Android/Chrome
+        deferredPrompt.prompt();
+        
+        // Tunggu respon pengguna (apakah mereka klik Instal atau Batal)
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+          console.log('User menerima instalasi PWA');
+        }
+        
+        // Hapus prompt yang sudah dipakai
+        setDeferredPrompt(null);
+      };
+
       useEffect(() => {
         if (!appUser || !user) return;
         const pushLocationToCloud = async () => {
@@ -1106,6 +1152,29 @@
                   </div>
                 </form>
               </div>
+            </div>
+          )}
+
+          {/* BANNER INSTALASI PWA (MUNCUL JIKA BELUM DIINSTAL) */}
+          {showInstallBanner && (
+            <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[92%] max-w-sm bg-gradient-to-r from-blue-600 to-blue-800 text-white p-4 rounded-3xl shadow-2xl z-[99999] animate-in slide-in-from-bottom-8 duration-500 border border-blue-400 flex flex-col gap-3">
+               <div className="flex justify-between items-start">
+                 <div className="flex gap-3 items-center">
+                   <div className="bg-white p-2 rounded-xl shrink-0 shadow-sm">
+                     <img src="https://drive.google.com/thumbnail?id=1qDaQ3F_0RDvC8GY8JQ1AKMEFYiiB-sgy&sz=w100" alt="Icon" className="w-8 h-8 object-contain" onError={(e) => { e.target.onerror = null; e.target.src = "https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Bank_BTN_logo.svg/512px-Bank_BTN_logo.svg.png"; }} />
+                   </div>
+                   <div>
+                     <h4 className="font-black text-sm leading-tight">Instal CLQ Mobile</h4>
+                     <p className="text-[10px] text-blue-100 mt-0.5 leading-snug font-medium">Pasang di layar utama HP agar lebih cepat & mendukung fitur offline kamera.</p>
+                   </div>
+                 </div>
+                 <button onClick={() => setShowInstallBanner(false)} className="p-1.5 bg-blue-900/40 rounded-full hover:bg-blue-900/60 transition-colors shrink-0">
+                   <X className="w-4 h-4 text-blue-100" />
+                 </button>
+               </div>
+               <button onClick={handleInstallClick} className="w-full bg-white text-blue-700 font-black py-3.5 rounded-2xl text-xs uppercase tracking-widest hover:bg-blue-50 active:scale-95 transition-all shadow-md mt-1">
+                  Instal Sekarang
+               </button>
             </div>
           )}
 
@@ -1493,46 +1562,10 @@
 
                 <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm grid grid-cols-1 gap-y-5">
                   <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tanggal Visit</label><input type="text" value={visitFormData["TANGGAL"]} readOnly className="w-full mt-1.5 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-500 font-bold text-sm cursor-not-allowed" /></div>
-                  <div>
-                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Kondisi Rumah <span className="text-red-500">*</span></label>
-                     <div className="relative mt-1.5">
-                       <select value={visitFormData["KONDISI RUMAH"]} onChange={(e) => setVisitFormData(p => ({...p, "KONDISI RUMAH": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
-                         <option value="">-- Pilih Kondisi --</option>
-                         {parameters.kondisiRumah.length > 0 ? parameters.kondisiRumah.map(opt => <option key={opt} value={opt}>{opt}</option>) : <option value="BERPENGHUNI">BERPENGHUNI</option>}
-                       </select>
-                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                     </div>
-                  </div>
-                  <div>
-                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Bertemu Dengan <span className="text-red-500">*</span></label>
-                     <div className="relative mt-1.5">
-                       <select value={visitFormData["BERTEMU DENGAN"]} onChange={(e) => setVisitFormData(p => ({...p, "BERTEMU DENGAN": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
-                         <option value="">-- Pilih --</option>
-                         {parameters.bertemuDengan.length > 0 ? parameters.bertemuDengan.map(opt => <option key={opt} value={opt}>{opt}</option>) : <option value="DEBITUR">DEBITUR</option>}
-                       </select>
-                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                     </div>
-                  </div>
-                  <div>
-                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Rukos <span className="text-red-500">*</span></label>
-                     <div className="relative mt-1.5">
-                       <select value={visitFormData["RUKOS"]} onChange={(e) => setVisitFormData(p => ({...p, "RUKOS": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
-                         <option value="">-- Pilih --</option>
-                         {parameters.rukos.length > 0 ? parameters.rukos.map(opt => <option key={opt} value={opt}>{opt}</option>) : <option value="MILIK SENDIRI">MILIK SENDIRI</option>}
-                       </select>
-                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                     </div>
-                  </div>
-                  <div>
-                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tindakan <span className="text-red-500">*</span></label>
-                     <div className="relative mt-1.5">
-                       <select value={visitFormData["TINDAKAN"]} onChange={(e) => setVisitFormData(p => ({...p, "TINDAKAN": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all">
-                         <option value="">-- Pilih --</option>
-                         {parameters.tindakan.length > 0 ? parameters.tindakan.map(opt => <option key={opt} value={opt}>{opt}</option>) : <option value="PENAGIHAN">PENAGIHAN</option>}
-                       </select>
-                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                     </div>
-                  </div>
+                  <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Kondisi Rumah <span className="text-red-500">*</span></label><div className="relative mt-1.5"><select value={visitFormData["KONDISI RUMAH"]} onChange={(e) => setVisitFormData(p => ({...p, "KONDISI RUMAH": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all"><option value="">-- Pilih Kondisi --</option>{parameters.kondisiRumah.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" /></div></div>
+                  <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Bertemu Dengan <span className="text-red-500">*</span></label><div className="relative mt-1.5"><select value={visitFormData["BERTEMU DENGAN"]} onChange={(e) => setVisitFormData(p => ({...p, "BERTEMU DENGAN": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all"><option value="">-- Pilih --</option>{parameters.bertemuDengan.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" /></div></div>
+                  <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Rukos <span className="text-red-500">*</span></label><div className="relative mt-1.5"><select value={visitFormData["RUKOS"]} onChange={(e) => setVisitFormData(p => ({...p, "RUKOS": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all"><option value="">-- Pilih --</option>{parameters.rukos.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" /></div></div>
+                  <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tindakan <span className="text-red-500">*</span></label><div className="relative mt-1.5"><select value={visitFormData["TINDAKAN"]} onChange={(e) => setVisitFormData(p => ({...p, "TINDAKAN": e.target.value}))} className="w-full px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer transition-all"><option value="">-- Pilih --</option>{parameters.tindakan.map(opt => <option key={opt} value={opt}>{opt}</option>)}</select><ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" /></div></div>
                   <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Tgl Janji Bayar <span className="font-normal text-slate-400">(Opsional)</span></label><input type="date" value={visitFormData["TGL JANJI BAYAR"]} onChange={(e) => setVisitFormData(p => ({...p, "TGL JANJI BAYAR": e.target.value}))} className="w-full mt-1.5 px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" /></div>
                   <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Catatan <span className="text-red-500">*</span></label><textarea value={visitFormData["CATATAN"]} onChange={(e) => setVisitFormData(p => ({...p, "CATATAN": e.target.value}))} className="w-full mt-1.5 px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" rows="3" placeholder="Isi catatan kunjungan..."></textarea></div>
                   <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Kontak HP Baru <span className="font-normal text-slate-400">(Opsional)</span></label><input type="tel" value={visitFormData["KONTAK HP BARU"] || ""} onChange={(e) => setVisitFormData(p => ({...p, "KONTAK HP BARU": e.target.value}))} className="w-full mt-1.5 px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Contoh: 08123456789" /></div>
