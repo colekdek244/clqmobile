@@ -564,7 +564,7 @@
           if(res && res.status === 'success') {
              const rawReports = res.data || [];
              
-             // PERBAIKAN: Menoleransi berbagai jenis header tanggal (tanggal, tanggal visit, tgl visit)
+             // PERBAIKAN: Menoleransi berbagai jenis header tanggal
              const getRawDate = (r) => r.tanggal || r['tanggal visit'] || r.tanggal_visit || r['tgl visit'] || '';
              
              rawReports.sort((a,b) => new Date(getRawDate(b) || 0) - new Date(getRawDate(a) || 0));
@@ -1066,7 +1066,7 @@
                     <label htmlFor="input_foto_profil" className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                       <Camera className="w-8 h-8 text-white" />
                     </label>
-                    <input id="input_foto_profil" type="file" accept="image/*" className="hidden" onClick={(e) => (e.target.value = null)} onChange={handleProfilePhoto} />
+                    <input id="input_foto_profil" type="file" accept="image/jpeg, image/png, image/jpg" className="opacity-0 absolute w-px h-px z-[-1]" onClick={(e) => (e.target.value = null)} onChange={handleProfilePhoto} />
                   </div>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-3">Ketuk foto untuk mengubah</p>
                 </div>
@@ -1528,10 +1528,10 @@
                     {visitFormData["FOTO RUMAH"] ? (
                       <div className="relative w-full rounded-2xl overflow-hidden border-2 border-blue-100 shadow-sm bg-slate-900 flex items-center justify-center">
                         <img src={visitFormData["FOTO RUMAH"]} alt="Preview Rumah" className="w-full object-contain aspect-[3/4]" />
-                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti<input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} /></label>
+                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti<input type="file" accept="image/jpeg, image/png, image/jpg" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} /></label>
                       </div>
                     ) : (
-                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Rumah</span><input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} /></label>
+                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Rumah</span><input type="file" accept="image/jpeg, image/png, image/jpg" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} /></label>
                     )}
                   </div>
                   <div className="flex flex-col h-full mt-2">
@@ -1539,10 +1539,10 @@
                     {visitFormData["FOTO TINDAKAN"] ? (
                       <div className="relative w-full rounded-2xl overflow-hidden border-2 border-blue-100 shadow-sm bg-slate-900 flex items-center justify-center">
                         <img src={visitFormData["FOTO TINDAKAN"]} alt="Preview Tindakan" className="w-full object-contain aspect-[3/4]" />
-                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti<input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} /></label>
+                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti<input type="file" accept="image/jpeg, image/png, image/jpg" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} /></label>
                       </div>
                     ) : (
-                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Tindakan</span><input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} /></label>
+                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Tindakan</span><input type="file" accept="image/jpeg, image/png, image/jpg" capture="environment" className="opacity-0 absolute w-px h-px z-[-1]" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} /></label>
                     )}
                   </div>
                 </div>
