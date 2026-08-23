@@ -1,11 +1,10 @@
-const CACHE_NAME = "clqmobile-v9"; 
+const CACHE_NAME = "clqmobile-v10"; 
 
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
   "/manifest.json",
   "/icons/icon-192.png",
-  // We keep the external CDNs here, but we will handle them safer below
   "https://cdn.tailwindcss.com",
   "https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;900&display=swap",
   "https://unpkg.com/@babel/standalone/babel.min.js",
@@ -23,15 +22,13 @@ self.addEventListener("install", (event) => {
     caches.open(CACHE_NAME).then(async (cache) => {
       console.log("[ServiceWorker] Pre-caching app shell & CDNs...");
       
-      // FIX: Cache files individually so one 404 doesn't crash the whole Service Worker
+      // FIX: Caching satu-satu agar 1 file error tidak membatalkan semuanya
       for (let asset of ASSETS_TO_CACHE) {
         try {
-          // Use 'no-cors' for external CDNs if they block the request during precaching
           const req = new Request(asset, { mode: asset.startsWith('http') ? 'no-cors' : 'cors' });
           await cache.add(req);
         } catch (err) {
-          console.warn(`[ServiceWorker] Failed to cache: ${asset}`, err);
-          // We just log the warning, but don't stop the loop!
+          console.warn(`[ServiceWorker] Gagal cache file (Abaikan saja): ${asset}`, err);
         }
       }
       return;
@@ -57,7 +54,7 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const reqUrl = event.request.url;
 
-  // Jangan simpan request API dinamik (Google Sheets CSV, Apps Script, Geocoding, Firebase DB) ke Cache SW
+  // 1. Abaikan API Dinamis (Jangan pernah di-cache)
   if (
     reqUrl.includes("docs.google.com") ||
     reqUrl.includes("script.google.com") ||
@@ -66,29 +63,34 @@ self.addEventListener("fetch", (event) => {
     reqUrl.includes("nominatim.openstreetmap.org") ||
     reqUrl.includes("bigdatacloud.net")
   ) {
-    // Biarkan langsung mengambil data live dari jaringan (Network Only)
     event.respondWith(fetch(event.request));
     return;
   }
 
-  // Untuk file aplikasi & library CDN: Cache First dengan Offline Navigation Fallback
+  // 2. Cache First Strategy untuk Aset & CDN
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
+      // Jika ada di cache, langsung gunakan
       if (cachedResponse) {
         return cachedResponse;
       }
+      
+      // Jika tidak ada di cache, ambil dari internet
       return fetch(event.request).then((networkResponse) => {
-        // PERBAIKAN: Mengizinkan tipe response 'basic' (lokal), 'cors', dan 'opaque' (dari no-cors)
+        // PERBAIKAN: Mengizinkan response 'opaque' (dari no-cors CDN) untuk disimpan
         if (!networkResponse || (networkResponse.status !== 200 && networkResponse.type !== 'opaque') || (networkResponse.type !== 'basic' && networkResponse.type !== 'cors' && networkResponse.type !== 'opaque')) {
           return networkResponse;
         }
+        
+        // Simpan salinan ke cache dinamis untuk dipakai offline nanti
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
         });
+        
         return networkResponse;
       }).catch(() => {
-        // Fallback navigasi jika fetch gagal saat membuka halaman dalam kondisi offline
+        // Fallback navigasi offline (Hanya jika sedang membuka halaman utama)
         if (event.request.mode === 'navigate') {
           return caches.match('/index.html') || caches.match('/');
         }
