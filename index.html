@@ -358,12 +358,15 @@
           e.target.value = null; return;
         }
         try {
-          let img;
-          if (window.createImageBitmap) { img = await createImageBitmap(file, { imageOrientation: 'from-image' }); } 
-          else {
-            const dataUrl = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = (ev) => resolve(ev.target.result); reader.readAsDataURL(file); });
-            img = new Image(); await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; });
-          }
+          const objectUrl = URL.createObjectURL(file);
+          const img = new Image();
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+            img.src = objectUrl;
+          });
+          URL.revokeObjectURL(objectUrl);
+          
           const size = Math.min(img.width, img.height);
           const startX = (img.width - size) / 2;
           const startY = (img.height - size) / 2;
@@ -373,7 +376,11 @@
           ctx.drawImage(img, startX, startY, size, size, 0, 0, 120, 120);
           setUserFormData(prev => ({...prev, foto_user: canvas.toDataURL('image/jpeg', 0.6)}));
           canvas.width = 0; canvas.height = 0;
-        } catch (err) { showNotification('error', 'Gagal Memproses', 'Perangkat tidak mendukung.'); }
+        } catch (err) { 
+          showNotification('error', 'Gagal Memproses', 'Memori tidak cukup atau format tidak didukung.'); 
+        } finally {
+          e.target.value = null;
+        }
       };
 
       const handlePhoto = async (e, field) => {
@@ -382,12 +389,15 @@
 
         if (file.type.startsWith('image/')) {
           try {
-            let img; let width, height;
-            if (window.createImageBitmap) { img = await createImageBitmap(file, { imageOrientation: 'from-image' }); width = img.width; height = img.height; } 
-            else {
-              const dataUrl = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = (ev) => resolve(ev.target.result); reader.readAsDataURL(file); });
-              img = new Image(); await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; }); width = img.width; height = img.height;
-            }
+            const objectUrl = URL.createObjectURL(file);
+            const img = new Image();
+            await new Promise((resolve, reject) => {
+              img.onload = resolve;
+              img.onerror = reject;
+              img.src = objectUrl;
+            });
+            const width = img.width; const height = img.height;
+            URL.revokeObjectURL(objectUrl); // Bebaskan memori RAM seketika!
 
             const MAX_DIMENSION = 600; let scale = 1;
             if (width > height && width > MAX_DIMENSION) scale = MAX_DIMENSION / width;
@@ -453,8 +463,16 @@
             setVisitFormData(prev => ({...prev, [field]: canvas.toDataURL('image/jpeg', 0.5)}));
             canvas.width = 0; canvas.height = 0;
 
-          } catch (err) { console.error(err); showNotification('error', 'Gagal Memproses Gambar', 'Pastikan perangkat dan browser mendukung.'); }
-        } else { showNotification('error', 'File Ditolak', 'Hanya format Gambar.'); e.target.value = null; }
+          } catch (err) { 
+            console.error(err); 
+            showNotification('error', 'Gagal Memproses Gambar', 'Pastikan perangkat mendukung dan memori cukup.'); 
+          } finally {
+            e.target.value = null; // Mencegah crash jika foto gagal tapi mau foto ulang
+          }
+        } else { 
+          showNotification('error', 'File Ditolak', 'Hanya format Gambar.'); 
+          e.target.value = null; 
+        }
       };
 
       // API: FETCH PARAMETERS & CONFIG 
