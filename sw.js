@@ -1,10 +1,11 @@
-const CACHE_NAME = "clqmobile-v7"; 
+const CACHE_NAME = "clqmobile-v9"; 
 
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
   "/manifest.json",
   "/icons/icon-192.png",
+  // We keep the external CDNs here, but we will handle them safer below
   "https://cdn.tailwindcss.com",
   "https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;900&display=swap",
   "https://unpkg.com/@babel/standalone/babel.min.js",
@@ -19,9 +20,21 @@ const ASSETS_TO_CACHE = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
       console.log("[ServiceWorker] Pre-caching app shell & CDNs...");
-      return cache.addAll(ASSETS_TO_CACHE);
+      
+      // FIX: Cache files individually so one 404 doesn't crash the whole Service Worker
+      for (let asset of ASSETS_TO_CACHE) {
+        try {
+          // Use 'no-cors' for external CDNs if they block the request during precaching
+          const req = new Request(asset, { mode: asset.startsWith('http') ? 'no-cors' : 'cors' });
+          await cache.add(req);
+        } catch (err) {
+          console.warn(`[ServiceWorker] Failed to cache: ${asset}`, err);
+          // We just log the warning, but don't stop the loop!
+        }
+      }
+      return;
     }).then(() => self.skipWaiting())
   );
 });
@@ -65,8 +78,8 @@ self.addEventListener("fetch", (event) => {
         return cachedResponse;
       }
       return fetch(event.request).then((networkResponse) => {
-        // Mengizinkan tipe response 'basic' (lokal) dan 'cors' (CDN eksternal) untuk disimpan ke cache
-        if (!networkResponse || networkResponse.status !== 200 || (networkResponse.type !== 'basic' && networkResponse.type !== 'cors')) {
+        // PERBAIKAN: Mengizinkan tipe response 'basic' (lokal), 'cors', dan 'opaque' (dari no-cors)
+        if (!networkResponse || (networkResponse.status !== 200 && networkResponse.type !== 'opaque') || (networkResponse.type !== 'basic' && networkResponse.type !== 'cors' && networkResponse.type !== 'opaque')) {
           return networkResponse;
         }
         const responseToCache = networkResponse.clone();
