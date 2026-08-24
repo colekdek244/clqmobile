@@ -1,10 +1,9 @@
-const CACHE_NAME = "clqmobile-v10"; 
+const CACHE_NAME = "clqmobile-v9";
 
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
   "/manifest.json",
-  "/icons/icon-192.png",
   "https://cdn.tailwindcss.com",
   "https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;900&display=swap",
   "https://unpkg.com/@babel/standalone/babel.min.js",
@@ -19,19 +18,9 @@ const ASSETS_TO_CACHE = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
+    caches.open(CACHE_NAME).then((cache) => {
       console.log("[ServiceWorker] Pre-caching app shell & CDNs...");
-      
-      // FIX: Caching satu-satu agar 1 file error tidak membatalkan semuanya
-      for (let asset of ASSETS_TO_CACHE) {
-        try {
-          const req = new Request(asset, { mode: asset.startsWith('http') ? 'no-cors' : 'cors' });
-          await cache.add(req);
-        } catch (err) {
-          console.warn(`[ServiceWorker] Gagal cache file (Abaikan saja): ${asset}`, err);
-        }
-      }
-      return;
+      return cache.addAll(ASSETS_TO_CACHE);
     }).then(() => self.skipWaiting())
   );
 });
@@ -54,7 +43,6 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const reqUrl = event.request.url;
 
-  // 1. Abaikan API Dinamis (Jangan pernah di-cache)
   if (
     reqUrl.includes("docs.google.com") ||
     reqUrl.includes("script.google.com") ||
@@ -67,30 +55,21 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 2. Cache First Strategy untuk Aset & CDN
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      // Jika ada di cache, langsung gunakan
       if (cachedResponse) {
         return cachedResponse;
       }
-      
-      // Jika tidak ada di cache, ambil dari internet
       return fetch(event.request).then((networkResponse) => {
-        // PERBAIKAN: Mengizinkan response 'opaque' (dari no-cors CDN) untuk disimpan
-        if (!networkResponse || (networkResponse.status !== 200 && networkResponse.type !== 'opaque') || (networkResponse.type !== 'basic' && networkResponse.type !== 'cors' && networkResponse.type !== 'opaque')) {
+        if (!networkResponse || networkResponse.status !== 200 || (networkResponse.type !== 'basic' && networkResponse.type !== 'cors')) {
           return networkResponse;
         }
-        
-        // Simpan salinan ke cache dinamis untuk dipakai offline nanti
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
         });
-        
         return networkResponse;
       }).catch(() => {
-        // Fallback navigasi offline (Hanya jika sedang membuka halaman utama)
         if (event.request.mode === 'navigate') {
           return caches.match('/index.html') || caches.match('/');
         }

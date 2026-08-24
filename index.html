@@ -52,7 +52,6 @@
     import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
     import { getFirestore, doc, setDoc, collection, addDoc } from 'firebase/firestore';
 
-    // Konfigurasi Firebase Firestore & Auth
     const firebaseConfig = {
       apiKey: "AIzaSyCQa34OvKQSyGXjntUkjAwA-lJmbPgFBK0",
       authDomain: "clq-sys.firebaseapp.com",
@@ -67,9 +66,8 @@
     const db = getFirestore(app);
     const appId = 'coleq-sys-app';
 
-    // KONFIGURASI KEAMANAN & API JSON
     const APP_SECRET_TOKEN = "CLQ-ADMIN-SECURE-8899";
-    const VISIT_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzhWlW0vJyH5MjWw5R565AQ9PVxVKKX5x8Yu59ReKrxZN20q8uweEtsHVmrGlxDnZBR/exec";
+    const VISIT_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbzg-ng5u0hlqSs960CmCC3sj9i9VyoxnwIi_iiky76yD3OGRBSbeabXcdtuymafYENX/exec";
     const VISIT_ACTION_NAME = "update_visit";
 
     const IDB_NAME = 'ColeqOfflineDB';
@@ -210,7 +208,6 @@
       return url;
     };
 
-    // Helper panggil JSON API GAS
     const callApi = async (action, payload = {}) => {
       for (let i = 0; i < 3; i++) {
         try {
@@ -232,7 +229,7 @@
     };
 
     function MobileApp() {
-      const [user, setUser] = useState(null);
+      // Non-blocking initial user state for 0ms instant render
       const [appUser, setAppUser] = useState(() => {
         try {
           const saved = localStorage.getItem('clq_app_user');
@@ -240,7 +237,9 @@
         } catch(e) { return null; }
       }); 
 
-      // --- STATE UNTUK PWA INSTALL PROMPT ---
+      const [user, setUser] = useState({ uid: appUser ? 'session-active' : 'mode-sandbox' });
+      const [loading, setLoading] = useState(false); // Non-blocking loading screen
+
       const [deferredPrompt, setDeferredPrompt] = useState(null);
       const [showInstallBanner, setShowInstallBanner] = useState(false);
       
@@ -250,7 +249,6 @@
       const [loginError, setLoginError] = useState('');
 
       const [activeTab, setActiveTab] = useState('dashboard');
-      const [loading, setLoading] = useState(true);
       const [modalConfig, setModalConfig] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null });
 
       const [showUserForm, setShowUserForm] = useState(false);
@@ -265,19 +263,58 @@
       const [expandedVisitLokasi, setExpandedVisitLokasi] = useState({}); 
 
       const [locationData, setLocationData] = useState({ lat: null, lng: null, address: '', addressObj: null });
-      const [dashboardStats, setDashboardStats] = useState({ target: 0, targetRp: 0, dikunjungi: 0, dikunjungiRp: 0, belum: 0, belumRp: 0 });
-      const [priorityTasks, setPriorityTasks] = useState([]); 
-      const [bayarData, setBayarData] = useState([]); 
-      const [isFetchingStats, setIsFetchingStats] = useState(false);
       
-      const [clusterName, setClusterName] = useState('Memuat...');
-      const [parameters, setParameters] = useState({ kondisiRumah: [], bertemuDengan: [], rukos: [], tindakan: [], jabatan: [] });
+      const [dashboardStats, setDashboardStats] = useState(() => {
+        try {
+          const userId = appUser ? getUserId(appUser).toUpperCase() : '';
+          const cached = localStorage.getItem('clq_dash_bundle_' + userId);
+          return cached ? JSON.parse(cached).stats : { target: 0, targetRp: 0, dikunjungi: 0, dikunjungiRp: 0, belum: 0, belumRp: 0 };
+        } catch(e) { return { target: 0, targetRp: 0, dikunjungi: 0, dikunjungiRp: 0, belum: 0, belumRp: 0 }; }
+      });
 
+      const [priorityTasks, setPriorityTasks] = useState(() => {
+        try {
+          const userId = appUser ? getUserId(appUser).toUpperCase() : '';
+          const cached = localStorage.getItem('clq_dash_bundle_' + userId);
+          return cached ? JSON.parse(cached).priorityTasks : [];
+        } catch(e) { return []; }
+      }); 
+
+      const [bayarData, setBayarData] = useState(() => {
+        try {
+          const userId = appUser ? getUserId(appUser).toUpperCase() : '';
+          const cached = localStorage.getItem('clq_dash_bundle_' + userId);
+          return cached ? JSON.parse(cached).bayarList : [];
+        } catch(e) { return []; }
+      }); 
+
+      const [reportData, setReportData] = useState(() => {
+        try {
+          const userId = appUser ? getUserId(appUser).toUpperCase() : '';
+          const cached = localStorage.getItem('clq_dash_bundle_' + userId);
+          return cached ? JSON.parse(cached).todayReport : [];
+        } catch(e) { return []; }
+      });
+
+      const [clusterName, setClusterName] = useState(() => {
+        try {
+          const cached = localStorage.getItem('clq_cluster_name');
+          return cached || 'Cluster Quality';
+        } catch(e) { return 'Cluster Quality'; }
+      });
+
+      const [parameters, setParameters] = useState(() => {
+        try {
+          const cached = localStorage.getItem('clq_params_cache');
+          return cached ? JSON.parse(cached) : { kondisiRumah: [], bertemuDengan: [], rukos: [], tindakan: [], jabatan: [] };
+        } catch(e) { return { kondisiRumah: [], bertemuDengan: [], rukos: [], tindakan: [], jabatan: [] }; }
+      });
+
+      const [isFetchingStats, setIsFetchingStats] = useState(false);
       const [isOffline, setIsOffline] = useState(!navigator.onLine);
       const [offlineQueue, setOfflineQueue] = useState([]);
       const [isSyncing, setIsSyncing] = useState(false);
 
-      const [reportData, setReportData] = useState([]);
       const [isFetchingReport, setIsFetchingReport] = useState(false);
       const [reportFilterDateStart, setReportFilterDateStart] = useState(() => getLocalDateStr());
       const [reportFilterDateEnd, setReportFilterDateEnd] = useState(() => getLocalDateStr());
@@ -354,7 +391,6 @@
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
       }, [appUser]);
 
-      // --- PENGOLAHAN FOTO ANTI-CRASH MEMORI ---
       const handleProfilePhoto = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -394,7 +430,6 @@
         if (file.type.startsWith('image/')) {
           try {
             let img; let width, height;
-            // Gunakan createImageBitmap untuk cegah PWA Silent Crash (OOM)
             if (window.createImageBitmap) { 
               img = await createImageBitmap(file, { imageOrientation: 'from-image' }); 
               width = img.width; height = img.height; 
@@ -420,8 +455,7 @@
               ctx.fillText(text, x, y);
             };
 
-            // PERBAIKAN: Logo Drive dengan Cache Buster Anti-CORS Taint
-            const logoUrl = "https://lh3.googleusercontent.com/d/1qDaQ3F_0RDvC8GY8JQ1AKMEFYiiB-sgy?_t=" + Date.now(); 
+            const logoUrl = "https://lh3.googleusercontent.com/d/1qDaQ3F_0RDvC8GY8JQ1AKMEFYiiB-sgy"; 
             const logoImg = new Image(); logoImg.crossOrigin = "Anonymous"; 
             await new Promise((resolve) => { logoImg.onload = resolve; logoImg.onerror = resolve; logoImg.src = logoUrl; });
 
@@ -478,29 +512,6 @@
         }
       };
 
-      // API: FETCH PARAMETERS & CONFIG 
-      const fetchAppConfigAndParams = async () => {
-        try {
-          const res = await callApi('get_parameters');
-          if (res && res.status === 'success') {
-             if (res.clusterName) setClusterName(res.clusterName);
-             if (res.data && res.data.length > 0) {
-                const rawData = res.data;
-                setParameters({ 
-                  kondisiRumah: [...new Set(rawData.map(r => r['kondisi rumah']).filter(Boolean))], 
-                  bertemuDengan: [...new Set(rawData.map(r => r['bertemu dengan']).filter(Boolean))], 
-                  rukos: [...new Set(rawData.map(r => r['rukos']).filter(Boolean))], 
-                  tindakan: [...new Set(rawData.map(r => r['tindakan']).filter(Boolean))], 
-                  jabatan: [...new Set(rawData.map(r => r['jabatan']).filter(Boolean))] 
-                });
-             }
-          }
-        } catch (err) { 
-          console.warn("Gagal menarik config & parameter via API", err);
-          if (clusterName === 'Memuat...') setClusterName('Cluster Quality');
-        }
-      };
-
       const fetchVisitData = async () => {
         if (!appUser) return;
         setIsFetchingVisit(true);
@@ -531,51 +542,47 @@
         } catch (error) { showNotification('error', 'Gagal Memuat Data', error.message); } finally { setIsFetchingVisit(false); }
       };
 
-      const fetchDashboardStats = async () => {
+      const fetchDashboardData = async () => {
         if (!appUser) return;
         setIsFetchingStats(true);
+        setIsFetchingReport(true);
         try {
           const myId = getUserId(appUser).toUpperCase();
-          const [resStats, resPending, resBayar, resKelolaan] = await Promise.all([
-             callApi('get_dashboard_stats'),
-             callApi('get_visit_pending', { id_user: myId }),
-             callApi('get_bayar'),
-             callApi('get_kelolaan')
-          ]);
+          const res = await callApi('get_dashboard_init', { id_user: myId });
 
-          if (resStats?.status === 'success' && resStats.stats) setDashboardStats(resStats.stats);
-          
-          if (resPending?.status === 'success') {
-             const pendingTasksList = (resPending.data || []).map(row => ({
-                ...row,
-                pokokVal: parseNominal(row.so_pokok_tdy || row.so_pokok || 0),
-                kolVal: parseInt(String(row.kol_tdy || row.kol || '0').replace(/[^0-9]/g, ''), 10) || 0 
-             }));
-             setPriorityTasks(pendingTasksList.sort((a, b) => b.pokokVal !== a.pokokVal ? b.pokokVal - a.pokokVal : b.kolVal - a.kolVal).slice(0, 5));
-          }
-          
-          if (resBayar?.status === 'success') {
-             let myKelolaanAccts = new Set();
-             if (resKelolaan?.status === 'success') {
-                myKelolaanAccts = new Set(resKelolaan.data.filter(k => getUserId(k).toUpperCase() === myId).map(k => getAcct(k)).filter(Boolean));
+          if (res && res.status === 'success') {
+             if (res.stats) setDashboardStats(res.stats);
+             if (res.priorityTasks) setPriorityTasks(res.priorityTasks);
+             if (res.todayReport) setReportData(res.todayReport);
+             if (res.bayarList) setBayarData(res.bayarList);
+             if (res.clusterName) {
+                setClusterName(res.clusterName);
+                localStorage.setItem('clq_cluster_name', res.clusterName);
+             }
+             if (res.parameters) {
+                setParameters(res.parameters);
+                localStorage.setItem('clq_params_cache', JSON.stringify(res.parameters));
              }
 
-             const mappedBayar = (resBayar.data || []).filter(b => {
-                const acct = getAcct(b);
-                return acct && myKelolaanAccts.has(acct);
-             }).map(b => ({
-                acctno: getAcct(b),
-                sname: getUserName(b) || "Tanpa Nama",
-                lpdloc: b.lpdloc || b.lokasi || "-",
-                kol_tdy: b.kol_tdy || b.kol || "-",
-                so_pokok_tdy: b.so_pokok_tdy || b.pokok || b.nominal || b.amount || b.bayar || "0"
-             }));
-             setBayarData(mappedBayar);
+             // Save bundle to localStorage for instant 0ms render next time
+             try {
+                localStorage.setItem('clq_dash_bundle_' + myId, JSON.stringify(res));
+             } catch(e) {}
           }
-        } catch (err) { console.error(err); } finally { setIsFetchingStats(false); }
+        } catch (err) { 
+           console.error("Gagal menarik data dashboard init bundle", err); 
+        } finally { 
+           setIsFetchingStats(false); 
+           setIsFetchingReport(false);
+        }
       };
 
       const handleFetchReport = async () => {
+        const today = getLocalDateStr();
+        if (reportFilterDateStart === today && reportFilterDateEnd === today) {
+           return fetchDashboardData();
+        }
+
         if (!appUser) return;
         setIsFetchingReport(true);
         try {
@@ -584,7 +591,6 @@
           
           if(res && res.status === 'success') {
              const rawReports = res.data || [];
-             
              const getRawDate = (r) => r.tanggal || r['tanggal visit'] || r.tanggal_visit || r['tgl visit'] || '';
              rawReports.sort((a,b) => new Date(getRawDate(b) || 0) - new Date(getRawDate(a) || 0));
              
@@ -717,7 +723,6 @@
             } else {
               const retries = (item.retryCount || 0) + 1;
               if (retries >= 3) {
-                console.warn("Item antrean offline ditolak berulang kali oleh server, menghapus dari IndexedDB:", item);
                 if (item.id !== undefined) await deleteIDBItem(item.id);
               } else {
                 item.retryCount = retries;
@@ -752,6 +757,7 @@
             
             localStorage.setItem('clq_app_user', JSON.stringify(safeUser));
             setAppUser(safeUser);
+            setUser({ uid: 'session-active' });
             requestWakeLock();
 
             if ("geolocation" in navigator) {
@@ -837,10 +843,8 @@
       };
 
       const handleGlobalRefresh = () => {
-        fetchAppConfigAndParams();
         if (activeTab === 'dashboard') {
-          fetchDashboardStats();
-          handleFetchReport();
+          fetchDashboardData();
         } else if (activeTab === 'visit' || activeTab === 'visit_form') {
           fetchVisitData();
         } else if (activeTab === 'users') {
@@ -854,7 +858,7 @@
             try { 
                 await signInAnonymously(auth); 
             } catch (err) { 
-                if (isMounted) { setUser({ uid: 'mode-sandbox' }); setLoading(false); }
+                if (isMounted) setUser(prev => prev || { uid: 'mode-sandbox' });
             } 
         };
         initAuth(); 
@@ -865,11 +869,10 @@
                 if (isMounted) {
                     if(u) { setUser(u); } 
                     else { setUser(prev => (prev && prev.uid === 'mode-sandbox') ? prev : { uid: 'mode-sandbox' }); }
-                    setLoading(false); 
                 }
             }); 
         } catch(e) {
-            if(isMounted) { setUser({ uid: 'mode-sandbox' }); setLoading(false); }
+            if(isMounted) setUser(prev => prev || { uid: 'mode-sandbox' });
         }
 
         return () => { isMounted = false; unsubscribe(); };
@@ -880,7 +883,6 @@
           const currentQueue = await getIDBQueue();
           setOfflineQueue(currentQueue);
         };
-
         initOfflineQueue();
 
         const handleOnline = () => setIsOffline(false); const handleOffline = () => setIsOffline(true);
@@ -890,45 +892,26 @@
 
       useEffect(() => { if (!isOffline && offlineQueue.length > 0 && !isSyncing) syncOfflineQueue(); }, [isOffline, offlineQueue.length]);
 
-      // --- EVENT LISTENER PWA INSTALL ---
       useEffect(() => {
         const handleBeforeInstallPrompt = (e) => {
-          // Mencegah mini-infobar bawaan Chrome muncul
           e.preventDefault();
-          // Menyimpan event agar bisa dipicu nanti saat tombol diklik
           setDeferredPrompt(e);
-          // Menampilkan banner kustom kita
           setShowInstallBanner(true);
         };
-
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-        // Jika PWA sudah sukses terinstal, sembunyikan banner
         window.addEventListener('appinstalled', () => {
           setShowInstallBanner(false);
           setDeferredPrompt(null);
         });
-
-        return () => {
-          window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-        };
+        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       }, []);
 
       const handleInstallClick = async () => {
         if (!deferredPrompt) return;
-        
-        // Sembunyikan banner kita
         setShowInstallBanner(false);
-        // Tampilkan pop-up instalasi bawaan Android/Chrome
         deferredPrompt.prompt();
-        
-        // Tunggu respon pengguna (apakah mereka klik Instal atau Batal)
         const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-          console.log('User menerima instalasi PWA');
-        }
-        
-        // Hapus prompt yang sudah dipakai
+        if (outcome === 'accepted') { console.log('PWA Accepted'); }
         setDeferredPrompt(null);
       };
 
@@ -972,24 +955,6 @@
         };
       }, [appUser, user, isOffline]);
 
-      // Load initial config parameters (Menghapus total link CSV statis)
-      useEffect(() => { fetchAppConfigAndParams(); }, []);
-
-      useEffect(() => {
-        if (activeTab === 'visit' || activeTab === 'visit_form') {
-           if (parameters.kondisiRumah.length === 0) {
-              fetchAppConfigAndParams();
-           }
-        }
-      }, [activeTab]);
-
-      useEffect(() => {
-        if (activeTab === 'users' && appUser) {
-          const currentPhoto = appUser.foto_user || appUser['foto user'] || appUser.foto || appUser.photo;
-          if (!currentPhoto) showNotification('warning', 'Foto Profil Wajib', 'Foto profil Anda masih kosong. Silakan Edit untuk mengunggah.');
-        }
-      }, [activeTab, appUser]);
-
       useEffect(() => {
         if (activeTab === 'visit_form') {
           setLocationData({ lat: null, lng: null, address: 'Mencari lokasi...', addressObj: null });
@@ -1022,17 +987,10 @@
 
       useEffect(() => { 
         if (activeTab === 'dashboard') {
-          fetchDashboardStats();
-          handleFetchReport();
+          fetchDashboardData();
         }
         if (activeTab === 'visit') fetchVisitData(); 
       }, [activeTab, appUser]);
-
-      if (!user || loading) return (
-        <div className="h-screen flex items-center justify-center bg-slate-50 p-6 text-center font-sans">
-          <div className="space-y-4"><Loader2 className="w-10 h-10 animate-spin text-blue-600 mx-auto" /><p className="text-slate-500 font-bold">Menyiapkan Aplikasi Lapangan...</p></div>
-        </div>
-      );
 
       if (!appUser) return (
         <div className="min-h-screen bg-gradient-to-b from-blue-700 to-blue-900 flex flex-col justify-center items-center p-6 font-sans md:p-12">
@@ -1071,7 +1029,6 @@
       return (
         <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 md:pb-32 font-sans max-w-md mx-auto shadow-2xl ring-1 ring-gray-200 flex flex-col relative overflow-hidden">
           
-          {/* MODAL PREVIEW FOTO */}
           {previewPhoto && (
             <div className="fixed inset-0 z-[9999999] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setPreviewPhoto(null)}>
               <div className="relative w-full max-w-sm h-auto max-h-[90vh] flex flex-col items-center justify-center" onClick={e => e.stopPropagation()}>
@@ -1088,7 +1045,6 @@
             </div>
           )}
 
-          {/* MODAL NOTIF */}
           {modalConfig.isOpen && (
             <div className="fixed inset-0 z-[9999998] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
               <div className="bg-white rounded-[2.5rem] p-6 md:p-8 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col items-center text-center border border-gray-100">
@@ -1113,7 +1069,6 @@
             </div>
           )}
 
-          {/* MODAL USER FORM */}
           {showUserForm && (
             <div className="fixed inset-0 z-[9999997] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
               <div className="bg-white rounded-[2.5rem] p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-300 border border-gray-100">
@@ -1127,7 +1082,7 @@
                     <label htmlFor="input_foto_profil" className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                       <Camera className="w-8 h-8 text-white" />
                     </label>
-                    <input id="input_foto_profil" type="file" accept="image/*" className="opacity-0 absolute w-px h-px z-[-1]" onChange={handleProfilePhoto} />
+                    <input id="input_foto_profil" type="file" accept="image/*" className="hidden" onChange={handleProfilePhoto} />
                   </div>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-3">Ketuk foto untuk mengubah</p>
                 </div>
@@ -1155,7 +1110,6 @@
             </div>
           )}
 
-          {/* BANNER INSTALASI PWA (MUNCUL JIKA BELUM DIINSTAL) */}
           {showInstallBanner && (
             <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-[92%] max-w-sm bg-gradient-to-r from-blue-600 to-blue-800 text-white p-4 rounded-3xl shadow-2xl z-[99999] animate-in slide-in-from-bottom-8 duration-500 border border-blue-400 flex flex-col gap-3">
                <div className="flex justify-between items-start">
@@ -1178,7 +1132,6 @@
             </div>
           )}
 
-          {/* HEADER UTAMA */}
           <header className="bg-gradient-to-r from-blue-700 to-blue-800 text-white p-4 sticky top-0 z-30 shadow-md border-b border-blue-600/20">
             <div className="flex justify-between items-center">
               <div className="flex flex-col gap-1.5">
@@ -1219,7 +1172,6 @@
             </div>
           </header>
 
-          {/* BANNER OFFLINE */}
           {(isOffline || offlineQueue.length > 0) && (
             <div className={`w-full px-4 py-3 text-[10px] font-bold flex justify-between items-center z-20 shadow-md animate-in slide-in-from-top-2 sticky top-[72px] transition-colors ${isOffline ? 'bg-amber-500 text-amber-50' : 'bg-blue-600 text-white'}`}>
               <div className="flex items-center gap-2">
@@ -1239,7 +1191,6 @@
             </div>
           )}
 
-          {/* KONTEN UTAMA */}
           <main className="p-4 flex-1 pb-28">
             {activeTab === 'dashboard' && (
               <div className="space-y-6 animate-in fade-in duration-500">
@@ -1247,7 +1198,7 @@
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center">
                       <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">Target Kunjungan</p>
-                      {isFetchingStats ? <Loader2 className="w-5 h-5 animate-spin text-blue-500 mt-1" /> : (
+                      {isFetchingStats && dashboardStats.target === 0 ? <Loader2 className="w-5 h-5 animate-spin text-blue-500 mt-1" /> : (
                         <div className="flex flex-col gap-1">
                           <p className="text-2xl font-black text-slate-800 leading-none">{dashboardStats.target}</p>
                           <p className="text-[10px] font-bold text-slate-400 leading-none truncate">Rp {formatUang(dashboardStats.targetRp)}</p>
@@ -1256,7 +1207,7 @@
                     </div>
                     <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center">
                       <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">Sudah Dikunjungi</p>
-                      {isFetchingStats ? <Loader2 className="w-5 h-5 animate-spin text-green-500 mt-1" /> : (
+                      {isFetchingStats && dashboardStats.dikunjungi === 0 ? <Loader2 className="w-5 h-5 animate-spin text-green-500 mt-1" /> : (
                         <div className="flex flex-col gap-1">
                           <p className="text-2xl font-black text-emerald-600 leading-none">{dashboardStats.dikunjungi}</p>
                           <p className="text-[10px] font-bold text-emerald-600 leading-none truncate">Rp {formatUang(dashboardStats.dikunjungiRp)}</p>
@@ -1268,7 +1219,7 @@
                     <div className="bg-white/10 p-3.5 rounded-2xl backdrop-blur-md border border-white/10"><Users className="w-6 h-6" /></div>
                     <div className="flex-1 flex flex-col justify-center h-full">
                       <p className="text-xs text-blue-100 font-medium">Debitur Belum di Visit</p>
-                      {isFetchingStats ? <Loader2 className="w-6 h-6 animate-spin text-white mt-1" /> : (
+                      {isFetchingStats && dashboardStats.belum === 0 ? <Loader2 className="w-6 h-6 animate-spin text-white mt-1" /> : (
                         <div className="flex justify-between items-end mt-1.5">
                           <p className="text-3xl font-black leading-none">{dashboardStats.belum} <span className="text-xs font-normal tracking-wide text-blue-200">Nasabah</span></p>
                           <p className="text-xs font-bold text-yellow-300 leading-none mb-0.5 bg-yellow-400/10 px-2.5 py-1 rounded-full border border-yellow-400/20">Rp {formatUang(dashboardStats.belumRp)}</p>
@@ -1278,14 +1229,14 @@
                   </div>
                 </div>
 
-                {/* --- LAPORAN KUNJUNGAN / RIWAYAT VISIT HARI INI --- */}
                 <section className="pt-2 pb-4">
                   <div className="mb-4 flex justify-between items-center">
                     <h2 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="w-5 h-5 text-blue-500" /> Riwayat Visit Hari Ini</h2>
+                    {isFetchingReport && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
                   </div>
 
                   <div className="space-y-3">
-                    {isFetchingReport ? (
+                    {isFetchingReport && reportData.length === 0 ? (
                       <div className="text-center py-6 bg-white rounded-2xl border border-gray-100"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></div>
                     ) : Object.keys(groupedReportData).length > 0 ? (
                       Object.entries(groupedReportData).map(([lokasi, items]) => (
@@ -1354,7 +1305,7 @@
                 <section>
                   <div className="mb-4"><h2 className="font-bold text-slate-800">Tugas Prioritas Anda</h2></div>
                   <div className="grid grid-cols-1 gap-3">
-                    {isFetchingStats ? <div className="text-center py-6"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></div> : priorityTasks.length > 0 ? (
+                    {isFetchingStats && priorityTasks.length === 0 ? <div className="text-center py-6"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></div> : priorityTasks.length > 0 ? (
                       priorityTasks.map((c, idx) => (
                         <div key={idx} onClick={() => {
                             setActiveVisitCustomer(c);
@@ -1371,7 +1322,7 @@
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-sm font-black text-slate-800">Rp {formatUang(c.pokokVal)}</p>
+                            <p className="text-sm font-black text-slate-800">Rp {formatUang(c.pokokVal || c.so_pokok_tdy)}</p>
                             <span className={`inline-block mt-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${c.kolVal >= 3 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>KOL {c.kol_tdy || '-'}</span>
                           </div>
                         </div>
@@ -1380,13 +1331,12 @@
                   </div>
                 </section>
 
-                {/* --- DEBITUR SUDAH BAYAR --- */}
                 <section className="pt-4 pb-2">
                   <div className="flex justify-between items-center mb-4">
                     <h2 className="font-bold text-slate-800">Debitur Sudah Bayar</h2>
                     <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2.5 py-1 rounded-xl uppercase tracking-widest">{bayarData.length} Nasabah</span>
                   </div>
-                  {isFetchingStats ? (
+                  {isFetchingStats && bayarData.length === 0 ? (
                     <div className="text-center py-6"><Loader2 className="w-6 h-6 animate-spin mx-auto text-green-500" /></div>
                   ) : bayarData.length > 0 ? (
                     <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
@@ -1537,7 +1487,6 @@
               </div>
             )}
 
-            {/* --- FORM VISIT ISI --- */}
             {activeTab === 'visit_form' && activeVisitCustomer && (
               <div className="space-y-4 animate-in slide-in-from-right-4 duration-300 pb-36 mb-10">
                 <div className="flex flex-col gap-4 bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
@@ -1570,7 +1519,6 @@
                   <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Catatan <span className="text-red-500">*</span></label><textarea value={visitFormData["CATATAN"]} onChange={(e) => setVisitFormData(p => ({...p, "CATATAN": e.target.value}))} className="w-full mt-1.5 px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" rows="3" placeholder="Isi catatan kunjungan..."></textarea></div>
                   <div><label className="text-[10px] uppercase tracking-wider font-bold text-slate-400">Kontak HP Baru <span className="font-normal text-slate-400">(Opsional)</span></label><input type="tel" value={visitFormData["KONTAK HP BARU"] || ""} onChange={(e) => setVisitFormData(p => ({...p, "KONTAK HP BARU": e.target.value}))} className="w-full mt-1.5 px-4 py-3.5 bg-slate-50/50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all" placeholder="Contoh: 08123456789" /></div>
 
-                  {/* Area Foto */}
                   <div className="flex flex-col h-full mt-2">
                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-2 block">Foto Rumah <span className="text-red-500">*</span></label>
                     {visitFormData["FOTO RUMAH"] ? (
@@ -1595,7 +1543,6 @@
                   </div>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex flex-col gap-3 pt-2">
                   <button onClick={submitVisitForm} disabled={isSavingVisitForm} className="w-full bg-blue-600 text-white font-black py-4 rounded-2xl text-sm uppercase tracking-widest shadow-lg shadow-blue-200 flex justify-center items-center gap-2 active:scale-95 transition-all disabled:bg-blue-300 cursor-pointer">
                     {isSavingVisitForm ? <span className="flex items-center gap-2"><Loader2 className="w-5 h-5 animate-spin"/> Menyimpan...</span> : <span className="flex items-center gap-2"><Save className="w-5 h-5" /> Simpan Visit</span>}
@@ -1631,7 +1578,6 @@
 
           </main>
 
-          {/* --- MENU NAVIGASI BAWAH --- */}
           <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/95 backdrop-blur-md border-t border-slate-100 px-4 py-4 flex justify-around items-center z-[999999] rounded-t-[2.5rem] shadow-[0_-10px_30px_rgba(0,0,0,0.05)] transition-all">
             <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 transition-all hover:scale-110 cursor-pointer ${activeTab === 'dashboard' ? 'text-blue-600 scale-110 drop-shadow-sm font-bold' : 'text-slate-400 font-medium'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Beranda</span></button>
             <button onClick={() => setActiveTab('visit')} className={`flex flex-col items-center gap-1 transition-all hover:scale-110 cursor-pointer ${(activeTab === 'visit' || activeTab === 'visit_form') ? 'text-blue-600 scale-110 drop-shadow-sm font-bold' : 'text-slate-400 font-medium'}`}><MapPin className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Visit</span></button>
@@ -1649,8 +1595,8 @@
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
         navigator.serviceWorker.register("/sw.js")
-          .then(reg => console.log("Fitur PWA Berhasil Diaktifkan!", reg))
-          .catch(err => console.log("Gagal memuat Service Worker PWA", err));
+          .then(reg => console.log("Service Worker Active!", reg))
+          .catch(err => console.log("Service Worker Failed", err));
       });
     }
   </script>
