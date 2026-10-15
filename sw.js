@@ -1,4 +1,4 @@
-const CACHE_NAME = "clqmobile-v10";
+const CACHE_NAME = "clqmobile-v11";
 
 const ASSETS_TO_CACHE = [
   "/",
@@ -44,6 +44,14 @@ self.addEventListener("fetch", (event) => {
   const reqUrl = event.request.url;
 
   if (
+    // Halaman aplikasi ITU SENDIRI (navigasi browser) tidak boleh dilayani dari
+    // cache. Kalau di-cache, petugas bisa terjebak memakai versi lama: versi
+    // baru sudah di-deploy, tetapi HP masih menyajikan index.html lama dan
+    // service worker baru tidak pernah terpasang.
+    reqUrl.includes("index.html") ||
+    reqUrl.endsWith("/") ||
+    event.request.mode === "navigate" ||
+
     reqUrl.includes("docs.google.com") ||
     reqUrl.includes("script.google.com") ||
     reqUrl.includes("firestore.googleapis.com") ||

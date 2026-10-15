@@ -1816,9 +1816,24 @@
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("/sw.js")
-          .then(reg => console.log("Service Worker Active!", reg))
+        navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
+          .then(reg => {
+            console.log("Service Worker Active!", reg);
+            // Paksa periksa pembaruan setiap aplikasi dibuka. Tanpa ini, HP
+            // bisa memakai versi lama berhari-hari walau versi baru sudah
+            // di-upload — dan petugas tetap melihat perilaku lama.
+            reg.update();
+          })
           .catch(err => console.log("Service Worker Failed", err));
+
+        // Kalau service worker baru mengambil alih, muat ulang sekali supaya
+        // kode baru langsung dipakai. Dijaga supaya tidak berputar terus.
+        let sudahMuatUlang = false;
+        navigator.serviceWorker.addEventListener("controllerchange", () => {
+          if (sudahMuatUlang) return;
+          sudahMuatUlang = true;
+          window.location.reload();
+        });
       });
     }
   </script>
