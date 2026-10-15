@@ -7,7 +7,7 @@ Terakhir diperbarui: 15 Oktober 2026 (malam), sesi lanjutan dari clq-portal.
 | | |
 |---|---|
 | Repo | https://github.com/colekdek244/clqmobile |
-| Branch | `ke-d1` |
+| Branch | `main` (branch `ke-d1` sudah di-merge & bisa ditinggalkan) |
 | Lokal | `~/projects/clqmobile` |
 | Backend | `~/projects/clq-portal` (Worker `clq-portal`, endpoint `/api/mobile/*`) |
 
@@ -36,16 +36,16 @@ sama untuk semua aplikasi web. Kalau manajemen memang memerlukan jejak penuh 8 j
 pilihannya adalah aplikasi Android asli (Capacitor + background geolocation, lokasi
 "selalu aktif", dipasang lewat APK/Play Store). Itu pekerjaan terpisah.
 
-## Sisa pekerjaan (belum selesai)
+## Sisa pekerjaan (per 15 Okt malam)
 
-1. **Merge `ke-d1` → `main` dan push.** Per 15 Okt, `origin/main` masih `a3b23df`
-   dan `origin/ke-d1` belum memuat commit `52c0e29`. Perubahan belum ada di GitHub.
-2. **Commit perbaikan cache (15 Okt malam, belum di-commit):**
-   - `sw.js`: navigasi/halaman `/` dan `/index.html` tidak lagi dilayani dari cache,
-     cache dinaikkan ke `clqmobile-v11`.
-   - `index.html`: `register(..., { updateViaCache: "none" })` + `reg.update()` setiap
-     aplikasi dibuka + muat ulang sekali saat service worker baru mengambil alih.
-   Alasan: tanpa itu HP petugas bisa terjebak versi lama berhari-hari.
+1. ~~Merge `ke-d1` → `main` dan push~~ — **SUDAH.** PR
+   https://github.com/colekdek244/clqmobile/pull/2 di-merge ke `main` (merge commit
+   `041f112`). Diverifikasi lewat API: `sw.js` di `main` sudah `clqmobile-v11` dan
+   `index.html` di `main` sudah memuat `updateViaCache`.
+2. **Upload `sw.js` ke host aplikasinya — WAJIB, ini yang tersisa.**
+   Sampai `sw.js` baru ada di server hosting, mekanisme pembaruan otomatis belum
+   bekerja dan HP tetap memakai versi lama. Kalau setelah upload perubahan masih tidak
+   terlihat di HP, itu cache — jangan menyalahkan kodenya dulu.
 3. **Uji di HP sungguhan** — login, izin GPS "selalu/saat dipakai", kunjungan + foto,
    dan pastikan titik muncul di Monitor.
 4. **Foto** masih memakai jalur Drive (thumbnail) di tampilan. Upload baru ke
