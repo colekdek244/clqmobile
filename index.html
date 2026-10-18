@@ -114,9 +114,22 @@
       });
     };
 
+    // API mobile mengirim kolom HURUF BESAR (SO_POKOK_TDY, KOL_TDY, ...),
+    // sedangkan kode lama membaca huruf kecil. Akibatnya saldo pokok tampil 0
+    // dan KOL tampil "-" walau datanya ada. Helper ini membaca keduanya.
+    const ambilKolom = (r, ...nama) => {
+      if (!r) return undefined;
+      for (const n of nama) {
+        if (r[n] !== undefined && r[n] !== null && r[n] !== '') return r[n];
+        const besar = String(n).toUpperCase();
+        if (r[besar] !== undefined && r[besar] !== null && r[besar] !== '') return r[besar];
+      }
+      return undefined;
+    };
+
     const getAcct = (r) => {
       if (!r) return null;
-      let val = r.acctno || r.no_rekening || r.account_no || r.rekening || r['no rekening'] || r['no. rekening'] || r['acct no'] || r['nomor rekening'] || r.norek || r.account || r.fasilitas || r['no fasilitas'] || r.no_fasilitas || r['no. rek'] || r['no rek'] || r.loan || r['no loan'];
+      let val = ambilKolom(r, 'acctno') || r.no_rekening || r.account_no || r.rekening || r['no rekening'] || r['no. rekening'] || r['acct no'] || r['nomor rekening'] || r.norek || r.account || r.fasilitas || r['no fasilitas'] || r.no_fasilitas || r['no. rek'] || r['no rek'] || r.loan || r['no loan'];
       return val ? String(val).trim() : null;
     };
     const getUserId = (r) => {
@@ -126,7 +139,7 @@
     };
     const getUserName = (r) => {
       if (!r) return "";
-      let val = r.nama_user || r.nama || r.name || r.nama_petugas || r['nama petugas'] || r['nama lengkap'] || r.sname || r.nama_debitur || r['nama debitur'];
+      let val = ambilKolom(r, 'nama_user', 'sname', 'nama_debitur') || r.nama || r.name || r.nama_petugas || r['nama petugas'] || r['nama lengkap'] || r['nama debitur'];
       return val ? String(val).trim() : "";
     };
     const getUserLevel = (r) => {
@@ -701,15 +714,23 @@
              setVisitData(pendingData.map(visit => {
                 const acctno = getAcct(visit);
                 const matchRindeb = rawDataRindeb.find(r => getAcct(r) === acctno);
+                // Nilai diambil dari Rindeb bila ada, kalau tidak dari baris tugas.
+                // API mengirim kolom HURUF BESAR, jadi pakai ambilKolom — dulu
+                // `matchRindeb.so_pokok_tdy` selalu undefined sehingga SISA POKOK
+                // tampil Rp 0 padahal datanya ada.
+                const pilih = (...nama) => {
+                  const a = ambilKolom(matchRindeb, ...nama);
+                  return (a !== undefined && a !== null && a !== '') ? a : ambilKolom(visit, ...nama);
+                };
                 return {
                   ...visit, acctno: acctno,
-                  sname: matchRindeb ? getUserName(matchRindeb) : (getUserName(visit) || "Tanpa Nama"),
-                  lpdloc: visit.lokasi || visit.lpdloc || (matchRindeb ? matchRindeb.lpdloc : "TIDAK DIKETAHUI"),
-                  alamat_agunan: matchRindeb ? (matchRindeb.alamat_agunan || matchRindeb['alamat agunan'] || matchRindeb.alamat || "Tidak Ditemukan") : "Data Rindeb Tidak Ada",
-                  hp1: matchRindeb ? (matchRindeb.hp1 || matchRindeb.hp || "") : "",
-                  so_pokok_tdy: matchRindeb ? matchRindeb.so_pokok_tdy : "0",
-                  kol_tdy: matchRindeb ? matchRindeb.kol_tdy : "-",
-                  tgk_angsuran: matchRindeb ? (matchRindeb.tgk_angsuran || matchRindeb.tgl_angsuran) : (visit.tgk_angsuran || "0")
+                  sname: getUserName(matchRindeb) || getUserName(visit) || "Tanpa Nama",
+                  lpdloc: visit.lokasi || pilih('lpdloc') || "TIDAK DIKETAHUI",
+                  alamat_agunan: pilih('alamat_agunan', 'alamat agunan', 'alamat') || "Tidak Ditemukan",
+                  hp1: pilih('hp1', 'hp') || "",
+                  so_pokok_tdy: pilih('so_pokok_tdy') ?? "0",
+                  kol_tdy: pilih('kol_tdy', 'kol_tdy_nama', 'kol_tdy_kode') ?? "-",
+                  tgk_angsuran: pilih('tgk_angsuran', 'tgl_angsuran') ?? "0"
                 };
              }));
           } else { throw new Error(res?.message || 'Server error'); }
@@ -774,8 +795,8 @@
                 sname: getUserName(visit) || "Tanpa Nama",
                 lpdloc: visit.lokasi || visit.lpdloc || "TIDAK DIKETAHUI",
                 alamat_agunan: visit.alamat_agunan || visit.alamat || "-",
-                so_pokok_tdy: visit._rindeb_so_pokok || visit.so_pokok_tdy || "0",
-                kol_tdy: visit._rindeb_kol || visit.kol_tdy || "-",
+                so_pokok_tdy: visit._rindeb_so_pokok || ambilKolom(visit, 'so_pokok_tdy') || "0",
+                kol_tdy: visit._rindeb_kol || ambilKolom(visit, 'kol_tdy', 'kol_tdy_nama', 'kol_tdy_kode') || "-",
                 tgk_angsuran: visit.tgk_angsuran || "0",
                 tanggal: String(getRawDate(visit)).trim()
              })));
