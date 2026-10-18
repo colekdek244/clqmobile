@@ -253,11 +253,30 @@
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = 'Bearer ' + token;
 
-      const response = await fetch(API_DASAR + jalur, {
-        method: opsi.method || 'GET',
-        headers,
-        body: opsi.body ? JSON.stringify(opsi.body) : undefined,
-      });
+      // BATAS WAKTU WAJIB (19 Okt): tanpa ini, satu permintaan yang menggantung
+      // membuat tombol "Menyimpan..." berputar SELAMANYA dan data petugas tidak
+      // pernah terkirim. Terbukti di uji: server membalas 69 ms, tetapi tombol
+      // tetap "Menyimpan..." lebih dari 30 detik karena await tidak pernah selesai.
+      // Foto bisa besar, jadi batasnya longgar (150 dtk) tetapi pasti berakhir.
+      const pengawas = new AbortController();
+      const batas = setTimeout(() => pengawas.abort(), opsi.batasMs || 150000);
+      let response;
+      try {
+        response = await fetch(API_DASAR + jalur, {
+          method: opsi.method || 'GET',
+          headers,
+          body: opsi.body ? JSON.stringify(opsi.body) : undefined,
+          signal: pengawas.signal,
+        });
+      } catch (e) {
+        clearTimeout(batas);
+        if (e && e.name === 'AbortError') {
+          throw new Error('Server tidak merespons dalam 150 detik. Periksa sinyal, lalu coba simpan lagi.');
+        }
+        throw e;
+      } finally {
+        clearTimeout(batas);
+      }
 
       let data = null;
       try { data = await response.json(); } catch (e) { data = null; }
@@ -474,7 +493,7 @@
         try {
           const userId = appUser ? getUserId(appUser).toUpperCase() : '';
           const cached = localStorage.getItem('clq_dash_bundle_' + userId);
-          return cached ? JSON.parse(cached).stats : { target: 0, targetRp: 0, dikunjungi: 0, dikunjungiRp: 0, belum: 0, belumRp: 0 };
+          return (cached && JSON.parse(cached).dashboardStats) || { target: 0, targetRp: 0, dikunjungi: 0, dikunjungiRp: 0, belum: 0, belumRp: 0 };
         } catch(e) { return { target: 0, targetRp: 0, dikunjungi: 0, dikunjungiRp: 0, belum: 0, belumRp: 0 }; }
       });
 
@@ -482,7 +501,7 @@
         try {
           const userId = appUser ? getUserId(appUser).toUpperCase() : '';
           const cached = localStorage.getItem('clq_dash_bundle_' + userId);
-          return cached ? JSON.parse(cached).priorityTasks : [];
+          return (cached && JSON.parse(cached).priorityTasks) || [];
         } catch(e) { return []; }
       }); 
 
@@ -490,7 +509,7 @@
         try {
           const userId = appUser ? getUserId(appUser).toUpperCase() : '';
           const cached = localStorage.getItem('clq_dash_bundle_' + userId);
-          return cached ? JSON.parse(cached).bayarList : [];
+          return (cached && JSON.parse(cached).bayarList) || [];
         } catch(e) { return []; }
       }); 
 
@@ -498,7 +517,7 @@
         try {
           const userId = appUser ? getUserId(appUser).toUpperCase() : '';
           const cached = localStorage.getItem('clq_dash_bundle_' + userId);
-          return cached ? JSON.parse(cached).todayReport : [];
+          return (cached && JSON.parse(cached).todayReport) || [];
         } catch(e) { return []; }
       });
 
@@ -535,7 +554,10 @@
 
       const groupedVisitData = useMemo(() => {
         const grouped = {};
-        visitData.forEach(item => {
+        // Pengaman: kalau data bukan array (mis. cache rusak / server berubah
+        // bentuk), tampilkan daftar kosong alih-alih membuat seluruh aplikasi
+        // gagal render dengan layar kosong.
+        (Array.isArray(visitData) ? visitData : []).forEach(item => {
           const lokasi = item.lpdloc || item.lokasi || 'TIDAK DIKETAHUI';
           if (!grouped[lokasi]) grouped[lokasi] = [];
           grouped[lokasi].push(item);
@@ -547,7 +569,7 @@
 
       const groupedReportData = useMemo(() => {
         const grouped = {};
-        reportData.forEach(item => {
+        (Array.isArray(reportData) ? reportData : []).forEach(item => {
           const lokasi = item.lpdloc || item.lokasi || 'TIDAK DIKETAHUI';
           if (!grouped[lokasi]) grouped[lokasi] = [];
           grouped[lokasi].push(item);
@@ -832,6 +854,14 @@
         }
       };
 
+      // NAMA AKSI SIMPAN KUNJUNGAN.
+      // Dulu kode ini memakai VISIT_ACTION_NAME yang TIDAK PERNAH DIDEKLARASIKAN,
+      // sehingga setiap kali petugas menekan "Simpan Visit" muncul
+      // "VISIT_ACTION_NAME is not defined" dan kunjungan TIDAK PERNAH tersimpan.
+      // Ini penyebab laporan lapangan selalu gagal masuk.
+      // callApi('update_visit') memanggil POST /api/mobile/visit.
+      const VISIT_ACTION_NAME = 'update_visit';
+
       const submitVisitForm = async () => {
         const requiredFields = [
           { key: "KONDISI RUMAH", label: "Kondisi Rumah" }, 
@@ -850,19 +880,35 @@
         }
 
         setIsSavingVisitForm(true);
-        
+        try {
         // Foto dikirim ke R2 dulu (kalau ada), karena yang disimpan di database
         // hanyalah KUNCI-nya. Kalau upload gagal, kunjungan tetap disimpan
         // supaya data kunjungan tidak hilang hanya karena masalah foto.
+        //
+        // PENTING: seluruh proses dibungkus try/finally di SINI (bukan hanya di
+        // bawah). Sebelumnya, bila unggah foto melempar galat, kode melompat ke
+        // luar dan setIsSavingVisitForm(false) TIDAK PERNAH dijalankan — tombol
+        // "Menyimpan..." berputar selamanya. Itu kondisi yang dilaporkan petugas.
         let kunciRumah = visitFormData["FOTO RUMAH"] || "";
         let kunciTindakan = visitFormData["FOTO TINDAKAN"] || "";
-        if (kunciRumah && kunciRumah.startsWith('data:')) {
-          const k = await kirimFoto(kunciRumah, 'rumah');
-          kunciRumah = k || "";
+        try {
+          if (kunciRumah && kunciRumah.startsWith('data:')) {
+            const k = await kirimFoto(kunciRumah, 'rumah');
+            kunciRumah = k || "";
+          }
+        } catch (eFoto) {
+          // Foto gagal diunggah: jangan gagalkan kunjungan, tapi beri tahu.
+          showNotification('warning', 'Foto Gagal Diunggah',
+            'Kunjungan tetap disimpan tanpa foto. ' + (eFoto && eFoto.message ? eFoto.message : ''));
+          kunciRumah = "";
         }
-        if (kunciTindakan && kunciTindakan.startsWith('data:')) {
-          const k = await kirimFoto(kunciTindakan, 'tindakan');
-          kunciTindakan = k || "";
+        try {
+          if (kunciTindakan && kunciTindakan.startsWith('data:')) {
+            const k = await kirimFoto(kunciTindakan, 'tindakan');
+            kunciTindakan = k || "";
+          }
+        } catch (eFoto2) {
+          kunciTindakan = "";
         }
 
         const finalVisitData = {
@@ -908,7 +954,7 @@
           }
         };
 
-        if (isOffline) { await saveToOfflineQueue(); setIsSavingVisitForm(false); return; }
+        if (isOffline) { await saveToOfflineQueue(); return; }
 
         try {
           const res = await callApi(VISIT_ACTION_NAME, { visit_id: payload.visit_id, data: payload.data });
@@ -917,10 +963,22 @@
             showNotification('success', 'Visit Tersimpan', 'Data hasil kunjungan berhasil diunggah.');
             await fetchVisitData(); setActiveTab('visit'); setActiveVisitCustomer(null);
           } else throw new Error(res?.message || 'Format respon server tidak valid.');
-        } catch (error) { 
-          if (error.message && (error.message.includes("Failed to fetch") || error.message.includes("NetworkError") || error.message.includes("Unexpected token"))) await saveToOfflineQueue();
-          else showNotification('error', 'Penyimpanan Gagal', error.message || 'Terdapat kesalahan pada jaringan.'); 
-        } finally { setIsSavingVisitForm(false); }
+        } catch (error) {
+          const pesan = (error && error.message) || '';
+          if (pesan.includes("Failed to fetch") || pesan.includes("NetworkError") || pesan.includes("Unexpected token") || pesan.includes("tidak merespons")) {
+            await saveToOfflineQueue();
+          } else {
+            showNotification('error', 'Penyimpanan Gagal', pesan || 'Terdapat kesalahan pada jaringan.');
+          }
+        }
+        } catch (luar) {
+          // Jaring terakhir: apa pun yang gagal di luar perkiraan tetap memberi
+          // pesan dan mengaktifkan tombol kembali.
+          showNotification('error', 'Penyimpanan Gagal', (luar && luar.message) || 'Kesalahan tidak terduga.');
+        } finally {
+          // WAJIB dijalankan pada SEMUA jalur (termasuk return di blok offline).
+          setIsSavingVisitForm(false);
+        }
       };
 
       const syncOfflineQueue = async () => {
@@ -1959,8 +2017,71 @@
       );
     }
 
-    const root = createRoot(document.getElementById('root'));
-    root.render(<MobileApp />);
+    // ============================================================
+    // PENGAMAN RENDER (19 Okt)
+    //
+    // Terbukti: setelah login, membuka ulang aplikasi menghasilkan layar KOSONG
+    // tanpa pesan apa pun (galat React #321 "Invalid hook call" tertelan).
+    // Petugas tidak tahu apa yang salah dan mengira aplikasi rusak.
+    //
+    // Blok ini menjamin: bila render gagal, layar menampilkan pesan dan tombol
+    // pemulihan, BUKAN halaman putih. Ini jaring pengaman, bukan perbaikan akar.
+    // ============================================================
+    const tampilkanPemulihan = (pesan) => {
+      try {
+        const rootEl = document.getElementById('root');
+        if (!rootEl) return;
+        rootEl.innerHTML =
+          '<div style="font-family:system-ui,sans-serif;padding:28px;max-width:430px;margin:0 auto">' +
+          '<h2 style="color:#b91c1c;font-size:18px;margin:0 0 10px">Aplikasi gagal dimuat</h2>' +
+          '<p style="color:#475569;font-size:13px;line-height:1.6;margin:0 0 6px">' + String(pesan || 'Kesalahan tidak diketahui') + '</p>' +
+          '<p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0 0 20px">' +
+          'Bila data kunjungan belum terkirim, JANGAN tutup aplikasi. Catat dulu di kertas lalu hubungi admin.</p>' +
+          '<button id="btnMuatUlang" style="width:100%;background:#2563eb;color:#fff;border:0;padding:14px;border-radius:14px;font-weight:800;font-size:13px;letter-spacing:.5px;margin-bottom:10px">MUAT ULANG</button>' +
+          '<button id="btnBersihkan" style="width:100%;background:#f1f5f9;color:#334155;border:0;padding:14px;border-radius:14px;font-weight:700;font-size:13px">MASUK ULANG (hapus data lokal)</button>' +
+          '</div>';
+        document.getElementById('btnMuatUlang').onclick = () => location.reload();
+        document.getElementById('btnBersihkan').onclick = () => {
+          try { localStorage.clear(); } catch (e) {}
+          location.reload();
+        };
+      } catch (e) { /* tidak boleh melempar lagi */ }
+    };
+
+    // Galat global: tangkap yang lolos dari React.
+    window.addEventListener('error', (ev) => {
+      if (document.getElementById('root').innerHTML.trim() === '') {
+        tampilkanPemulihan(ev.message || 'Galat saat memuat');
+      }
+    });
+    window.addEventListener('unhandledrejection', (ev) => {
+      if (document.getElementById('root').innerHTML.trim() === '') {
+        const r = ev.reason;
+        tampilkanPemulihan((r && r.message) || 'Galat saat memuat data');
+      }
+    });
+
+    try {
+      const root = createRoot(document.getElementById('root'));
+      root.onRecoverableError = (e) => {
+        console.error('Render pulih:', e);
+        if (document.getElementById('root').innerHTML.trim() === '') {
+          tampilkanPemulihan((e && e.message) || 'Galat saat menampilkan halaman');
+        }
+      };
+      root.render(<MobileApp />);
+
+      // Jaring terakhir: bila setelah 4 detik layar masih benar-benar kosong,
+      // tampilkan pemulihan. Cukup murah dan hanya menyentuh kondisi gagal.
+      setTimeout(() => {
+        const el = document.getElementById('root');
+        if (el && el.innerHTML.trim() === '') {
+          tampilkanPemulihan('Halaman tidak dapat ditampilkan.');
+        }
+      }, 4000);
+    } catch (e) {
+      tampilkanPemulihan((e && e.message) || 'Galat saat memulai aplikasi');
+    }
   </script>
 
   <script>
