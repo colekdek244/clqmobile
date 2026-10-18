@@ -1,19 +1,21 @@
-const CACHE_NAME = "clqmobile-v12";
+// v13: pustaka dipindah ke /vendor (tidak lagi dari CDN). Naikkan versi ini
+// setiap deploy agar cache lama di HP terhapus dan versi baru terpakai.
+const CACHE_NAME = "clqmobile-v13";
 
+// Hanya berkas dari server sendiri. Dulu daftar ini berisi CDN pihak ketiga;
+// bila salah satunya diblokir, cache gagal terisi dan aplikasi tampil putih.
+// Precache dibatasi pada berkas inti + pustaka lokal.
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",
   "/manifest.json",
-  "https://cdn.tailwindcss.com",
-  "https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;900&display=swap",
-  "https://unpkg.com/@babel/standalone/babel.min.js",
-  "https://esm.sh/react@18.2.0",
-  "https://esm.sh/react-dom@18.2.0/client",
-  "https://esm.sh/lucide-react@0.263.1?external=react",
-  "https://esm.sh/react@18.2.0/jsx-runtime",
-  "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js",
-  "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js",
-  "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js"
+  "/vendor/react.min.js",
+  "/vendor/react-dom.min.js",
+  "/vendor/react-shim.js",
+  "/vendor/lucide-shim.js",
+  "/vendor/lucide.min.mjs",
+  "/vendor/tailwind.js",
+  "/vendor/babel.min.js"
 ];
 
 self.addEventListener("install", (event) => {

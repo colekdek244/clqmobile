@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="CLQ Mobile" />
   <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/vendor/tailwind.js"></script>
   
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;900&display=swap');
@@ -20,30 +20,49 @@
     body { background-color: #f3f4f6; font-family: 'Cairo', sans-serif; margin: 0; padding: 0; } 
   </style>
 
+  <!--
+    PUSTAKA DIMUAT DARI SERVER SENDIRI, BUKAN CDN.
+
+    Dulu React/lucide/Babel diambil dari esm.sh, unpkg.com, dan cdn.tailwindcss.com.
+    Di jaringan yang memblokir CDN (umum di kantor), SEMUA gagal dimuat dan
+    halaman tampil PUTIH KOSONG tanpa pesan — terbukti saat diuji dengan CDN
+    diblokir. Sekarang semuanya ada di /vendor sehingga aplikasi tetap hidup.
+  -->
+  <script src="/vendor/react.min.js"></script>
+  <script src="/vendor/react-dom.min.js"></script>
+
   <script type="importmap">
     {
       "imports": {
-        "react": "https://esm.sh/react@18.2.0",
-        "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-        "lucide-react": "https://esm.sh/lucide-react@0.263.1?external=react",
-        "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime"
+        "react": "/vendor/react-shim.js",
+        "react-dom/client": "/vendor/react-shim.js",
+        "lucide-react": "/vendor/lucide-shim.js",
+        "react/jsx-runtime": "/vendor/react-shim.js"
       }
     }
   </script>
-  
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Babel dimuat di akhir body (lihat pemuat di bawah) supaya kode aplikasi
+       sudah ada di DOM saat diterjemahkan. -->
 </head>
 <body>
   <div id="root"></div>
 
-  <script type="text/babel" data-type="module">
+  <!--
+    PEMUAT YANG TIDAK BERGANTUNG PADA PEMINDAIAN OTOMATIS BABEL.
+    Babel versi CDN lama otomatis mencari <script type="text/babel">. Versi yang
+    disimpan lokal belum tentu melakukan itu, sehingga aplikasi tidak pernah
+    dijalankan (root kosong = halaman putih). Di sini kode ditransformasi lalu
+    dijalankan secara eksplisit sebagai modul, dengan pesan galat yang terlihat.
+  -->
+  <script type="text/babel" data-type="module" id="kodeAplikasi">
     import React, { useState, useEffect, useMemo } from 'react';
     import { createRoot } from 'react-dom/client';
     import { 
       MapPin, Phone, MessageSquare, CheckCircle, AlertCircle, 
       LayoutDashboard, Users, Loader2, RefreshCw, Database, Info, 
       Lock, UserCircle, LogOut, ChevronDown, Camera, X, Save, Edit,
-      FileText, Image as ImageIcon, ExternalLink, Sun, Moon
+      FileText, ImageIcon, ExternalLink, Sun, Moon
     } from 'lucide-react';
     // Firebase SUDAH TIDAK DIPAKAI. Sebelumnya dipakai untuk posisi GPS
     // (collection locations & routes, login anonim) — semuanya kini ditangani
@@ -1964,6 +1983,54 @@
         });
       });
     }
+  </script>
+
+  <script>
+    // Jalankan aplikasi secara eksplisit: transformasi JSX lalu eksekusi.
+    // Semua galat ditampilkan di layar — jangan sampai putih tanpa penjelasan.
+    (function () {
+      function tampilkanGalat(pesan) {
+        var root = document.getElementById('root');
+        if (!root) return;
+        root.innerHTML =
+          '<div style="font-family:sans-serif;padding:28px;max-width:420px;margin:0 auto">' +
+          '<h2 style="color:#b91c1c;font-size:18px">Aplikasi gagal dimuat</h2>' +
+          '<p style="color:#475569;font-size:13px;line-height:1.6">' + pesan + '</p>' +
+          '<p style="color:#94a3b8;font-size:12px;margin-top:16px">Coba muat ulang halaman. ' +
+          'Bila tetap gagal, kirimkan tulisan ini ke admin.</p></div>';
+      }
+
+      function jalan() {
+        try {
+          if (typeof Babel === 'undefined') {
+            tampilkanGalat('Pustaka penerjemah (Babel) tidak termuat. Periksa koneksi ke server.');
+            return;
+          }
+          var el = document.getElementById('kodeAplikasi');
+          var kode = el.textContent;
+          var hasil = Babel.transform(kode, {
+            presets: [['react', { runtime: 'classic' }]],
+            filename: 'aplikasi.jsx',
+            sourceType: 'module',
+          });
+          var blob = new Blob([hasil.code], { type: 'text/javascript' });
+          var mod = document.createElement('script');
+          mod.type = 'module';
+          mod.src = URL.createObjectURL(blob);
+          mod.onerror = function () { tampilkanGalat('Berkas aplikasi gagal dijalankan.'); };
+          document.body.appendChild(mod);
+        } catch (e) {
+          tampilkanGalat('Galat saat memuat aplikasi: ' + (e && e.message ? e.message : e));
+        }
+      }
+
+      // Babel dimuat SETELAH kode aplikasi ada di DOM.
+      var s = document.createElement('script');
+      s.src = '/vendor/babel.min.js';
+      s.onload = jalan;
+      s.onerror = function () { tampilkanGalat('Pustaka penerjemah (Babel) gagal diunduh.'); };
+      document.body.appendChild(s);
+    })();
   </script>
 </body>
 </html>
