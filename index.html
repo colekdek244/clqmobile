@@ -56,7 +56,7 @@
     dijalankan secara eksplisit sebagai modul, dengan pesan galat yang terlihat.
   -->
   <script type="text/babel" data-type="module" id="kodeAplikasi">
-    import React, { useState, useEffect, useMemo } from 'react';
+    import React, { useState, useEffect, useMemo, useRef } from 'react';
     import { createRoot } from 'react-dom/client';
     import { 
       MapPin, Phone, MessageSquare, CheckCircle, AlertCircle, 
@@ -541,7 +541,17 @@
       const [isSyncing, setIsSyncing] = useState(false);
 
       const [isFetchingReport, setIsFetchingReport] = useState(false);
-      const [reportFilterDateStart, setReportFilterDateStart] = useState(() => getLocalDateStr());
+      // Rentang laporan: default 7 hari ke belakang (termasuk hari ini).
+      // Biaya baca D1 = jumlah kunjungan di rentang itu, bukan jumlah hari:
+      // kueri memakai indeks (id_user, tanggal), hari tanpa kunjungan = 0 baris.
+      // Terukur: 30 hari petugas tersibuk tetap 0 baris; sebulan penuh ~772 baris
+      // dari kuota 5.000.000/hari.
+      const tanggalMundur = (hari) => {
+        const d = new Date();
+        d.setDate(d.getDate() - hari);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      };
+      const [reportFilterDateStart, setReportFilterDateStart] = useState(() => tanggalMundur(6));
       const [reportFilterDateEnd, setReportFilterDateEnd] = useState(() => getLocalDateStr());
       const [previewPhoto, setPreviewPhoto] = useState(null);
       const [expandedReportLokasi, setExpandedReportLokasi] = useState({});
@@ -792,7 +802,8 @@
              // selalu tampil 0 walau data tersedia.
              if (res.dashboardStats) setDashboardStats(res.dashboardStats);
              if (res.priorityTasks) setPriorityTasks(res.priorityTasks);
-             if (res.todayReport) setReportData(res.todayReport);
+             // Server tidak mengirim todayReport (kode ini memang sudah mati).
+             // Laporan diambil lewat handleFetchReport pada useEffect di bawah.
              if (res.bayarList) setBayarData(res.bayarList);
              if (res.clusterName) {
                 setClusterName(res.clusterName);
@@ -816,17 +827,31 @@
         }
       };
 
-      const handleFetchReport = async () => {
-        const today = getLocalDateStr();
-        if (reportFilterDateStart === today && reportFilterDateEnd === today) {
-           return fetchDashboardData();
+      const handleFetchReport = async (dariArg, sampaiArg) => {
+        // Menerima rentang eksplisit: tombol pintas (7 HARI/30 HARI/BULAN INI)
+        // sebelumnya memakai setTimeout untuk menunggu state berubah, tetapi
+        // fungsi closure memakai nilai LAMA sehingga hasilnya tidak berubah.
+        // Sekarang nilai dikirim langsung — tidak bergantung pada timing state.
+        const dari = dariArg || reportFilterDateStart;
+        const sampai = sampaiArg || reportFilterDateEnd;
+        // Dulu ada jalan pintas: kalau rentang = hari ini, ia memanggil
+        // fetchDashboardData() dan berharap server mengirim `todayReport`.
+        // Server TIDAK PERNAH mengirim kunci itu, sehingga daftar jadi kosong.
+        // Sekarang SELALU ambil dari /api/mobile/laporan (satu permintaan).
+        if (!appUser) return;
+        if (!dari || !sampai) {
+          showNotification('warning', 'Tanggal Belum Lengkap', 'Isi tanggal awal dan tanggal akhir laporan.');
+          return;
+        }
+        if (dari > sampai) {
+          showNotification('warning', 'Tanggal Terbalik', 'Tanggal awal tidak boleh melewati tanggal akhir.');
+          return;
         }
 
-        if (!appUser) return;
         setIsFetchingReport(true);
         try {
           const myId = getUserId(appUser).toUpperCase();
-          const res = await callApi('get_report', { date_from: reportFilterDateStart, date_to: reportFilterDateEnd, id_user: myId });
+          const res = await callApi('get_report', { date_from: dari, date_to: sampai, id_user: myId });
           
           if(res && res.status === 'success') {
              const rawReports = res.data || [];
@@ -1183,6 +1208,16 @@
       }, []);
 
       useEffect(() => { if (!isOffline && offlineQueue.length > 0 && !isSyncing) syncOfflineQueue(); }, [isOffline, offlineQueue.length]);
+
+      // Ambil laporan sekali setelah petugas login / setelah kunjungan tersimpan,
+      // supaya daftar Riwayat Visit langsung berisi (default 7 hari).
+      // Dijaga ref agar tidak berulang setiap render (mencegah baca D1 sia-sia).
+      const laporanSudahDiambil = useRef(false);
+      useEffect(() => {
+        if (!appUser || laporanSudahDiambil.current) return;
+        laporanSudahDiambil.current = true;
+        handleFetchReport();
+      }, [appUser]);
 
       useEffect(() => {
         const handleBeforeInstallPrompt = (e) => {
@@ -1642,9 +1677,38 @@
                 </div>
 
                 <section className="pt-2 pb-4">
-                  <div className="mb-4 flex justify-between items-center">
-                    <h2 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="w-5 h-5 text-blue-500" /> Riwayat Visit Hari Ini</h2>
+                  <div className="mb-3 flex justify-between items-center">
+                    <h2 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="w-5 h-5 text-blue-500" /> Riwayat Visit</h2>
                     {isFetchingReport && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
+                  </div>
+
+                  {/* PILIH RENTANG TANGGAL LAPORAN */}
+                  <div className="mb-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] font-black text-slate-500 tracking-wide">RENTANG TANGGAL</span>
+                      <span className="text-[10px] font-bold text-slate-400">{reportData.length} kunjungan</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input type="date" value={reportFilterDateStart} max={reportFilterDateEnd || getLocalDateStr()}
+                        onChange={(e) => setReportFilterDateStart(e.target.value)}
+                        className="flex-1 min-w-0 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 bg-slate-50" />
+                      <span className="text-slate-400 text-xs font-bold">s/d</span>
+                      <input type="date" value={reportFilterDateEnd} min={reportFilterDateStart} max={getLocalDateStr()}
+                        onChange={(e) => setReportFilterDateEnd(e.target.value)}
+                        className="flex-1 min-w-0 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-bold text-slate-700 bg-slate-50" />
+                    </div>
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={() => { const a = tanggalMundur(6); setReportFilterDateStart(a); setReportFilterDateEnd(getLocalDateStr()); handleFetchReport(a, getLocalDateStr()); }}
+                        className="flex-1 py-2 rounded-xl bg-blue-50 text-blue-700 text-[11px] font-black">7 HARI</button>
+                      <button onClick={() => { const a = tanggalMundur(29); setReportFilterDateStart(a); setReportFilterDateEnd(getLocalDateStr()); handleFetchReport(a, getLocalDateStr()); }}
+                        className="flex-1 py-2 rounded-xl bg-blue-50 text-blue-700 text-[11px] font-black">30 HARI</button>
+                      <button onClick={() => { const aw = getLocalDateStr().slice(0,7) + '-01'; setReportFilterDateStart(aw); setReportFilterDateEnd(getLocalDateStr()); handleFetchReport(aw, getLocalDateStr()); }}
+                        className="flex-1 py-2 rounded-xl bg-blue-50 text-blue-700 text-[11px] font-black">BULAN INI</button>
+                    </div>
+                    <button onClick={() => handleFetchReport(reportFilterDateStart, reportFilterDateEnd)}
+                      className="w-full mt-2 py-2.5 rounded-xl bg-blue-600 text-white text-[11px] font-black tracking-wide">
+                      TAMPILKAN
+                    </button>
                   </div>
 
                   <div className="space-y-3">
