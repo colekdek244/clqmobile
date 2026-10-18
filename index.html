@@ -289,7 +289,11 @@
             return panggilApi('/api/mobile/tugas');
 
           case 'get_rindeb':
-            return panggilApi('/api/mobile/debitur?limit=500');
+            // hanya_tugas=1: server hanya mengirim acctno yang memang ada di daftar
+            // tugas petugas ini, bukan 500 acctno kelolaan. Penghematan terukur:
+            // 18.409 -> 3.136 langkah baca D1 (-83%), dan petugas dengan kelolaan
+            // >500 tidak lagi kehilangan nama/alamat untuk tugas di luar 500 pertama.
+            return panggilApi('/api/mobile/debitur?limit=500&hanya_tugas=1');
 
           case 'get_report': {
             const q = [];

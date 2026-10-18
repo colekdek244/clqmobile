@@ -1,4 +1,4 @@
-const CACHE_NAME = "clqmobile-v11";
+const CACHE_NAME = "clqmobile-v12";
 
 const ASSETS_TO_CACHE = [
   "/",
