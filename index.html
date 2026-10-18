@@ -268,6 +268,16 @@
               simpanToken(r.token);
               return { status: 'success', user: r.user };
             }
+            // Akun yang password-nya wajib diganti ditolak server (409 GANTI_PASSWORD).
+            // Beri pesan tegas supaya petugas tahu harus lewat browser dulu,
+            // bukan mengira aplikasi rusak.
+            if (r && r.kode === 'GANTI_PASSWORD') {
+              return {
+                status: 'error',
+                message: 'Password Anda harus diganti dulu. Buka portal di browser HP/laptop, '
+                       + 'masuk, lalu ganti password. Setelah itu baru bisa login di aplikasi ini.',
+              };
+            }
             return r;
           }
 
