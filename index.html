@@ -765,7 +765,10 @@
           const res = await callApi('get_dashboard_init', { id_user: myId });
 
           if (res && res.status === 'success') {
-             if (res.stats) setDashboardStats(res.stats);
+             // Server mengirim `dashboardStats` (bukan `stats`). Dulu kuncinya
+             // salah, sehingga angka target TIDAK PERNAH masuk ke layar dan
+             // selalu tampil 0 walau data tersedia.
+             if (res.dashboardStats) setDashboardStats(res.dashboardStats);
              if (res.priorityTasks) setPriorityTasks(res.priorityTasks);
              if (res.todayReport) setReportData(res.todayReport);
              if (res.bayarList) setBayarData(res.bayarList);
