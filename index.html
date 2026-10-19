@@ -503,13 +503,6 @@
         } catch(e) { return { target: 0, targetRp: 0, dikunjungi: 0, dikunjungiRp: 0, belum: 0, belumRp: 0 }; }
       });
 
-      const [priorityTasks, setPriorityTasks] = useState(() => {
-        try {
-          const userId = appUser ? getUserId(appUser).toUpperCase() : '';
-          const cached = localStorage.getItem('clq_dash_bundle_' + userId);
-          return (cached && JSON.parse(cached).priorityTasks) || [];
-        } catch(e) { return []; }
-      }); 
 
       const [bayarData, setBayarData] = useState(() => {
         try {
@@ -517,7 +510,7 @@
           const cached = localStorage.getItem('clq_dash_bundle_' + userId);
           return (cached && JSON.parse(cached).bayarList) || [];
         } catch(e) { return []; }
-      }); 
+      });
 
       const [reportData, setReportData] = useState(() => {
         try {
@@ -849,7 +842,6 @@
              // salah, sehingga angka target TIDAK PERNAH masuk ke layar dan
              // selalu tampil 0 walau data tersedia.
              if (res.dashboardStats) setDashboardStats(res.dashboardStats);
-             if (res.priorityTasks) setPriorityTasks(res.priorityTasks);
              // Server tidak mengirim todayReport (kode ini memang sudah mati).
              // Laporan diambil lewat handleFetchReport pada useEffect di bawah.
              // Server TIDAK mengirim bayarList (kunci ini memang tidak pernah ada).
@@ -1916,34 +1908,6 @@
                   </div>
                 </section>
 
-                <section>
-                  <div className="mb-4"><h2 className="font-bold text-slate-800">Tugas Prioritas Anda</h2></div>
-                  <div className="grid grid-cols-1 gap-3">
-                    {isFetchingStats && priorityTasks.length === 0 ? <div className="text-center py-6"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></div> : priorityTasks.length > 0 ? (
-                      priorityTasks.map((c, idx) => (
-                        <div key={idx} onClick={() => {
-                            setActiveVisitCustomer(c);
-                            setVisitFormData({ "TANGGAL": getCurrentDateTime(), "KONDISI RUMAH": "", "BERTEMU DENGAN": "", "RUKOS": "", "TINDAKAN": "", "TGL JANJI BAYAR": "", "CATATAN": "", "KONTAK HP BARU": "", "FOTO RUMAH": "", "FOTO TINDAKAN": "", "ACCTNO": getAcct(c), "ID_USER": getUserId(appUser) });
-                            setActiveTab('visit_form');
-                          }} className="bg-white p-4 rounded-2xl border border-slate-100 flex items-center justify-between cursor-pointer hover:border-blue-400 hover:shadow-md transition-all active:scale-[0.98] shadow-sm">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-black text-white shadow-sm ${c.kolVal >= 3 ? 'bg-red-500' : 'bg-amber-500'}`}>
-                              {(getUserName(c) || '?').charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-sm text-slate-700 truncate max-w-[140px]">{getUserName(c) || 'Tanpa Nama'}</h3>
-                              <p className="text-[10px] text-slate-400 font-bold tracking-widest">{getAcct(c)}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-black text-slate-800">Rp {formatUang(c.pokokVal || c.so_pokok_tdy)}</p>
-                            <span className={`inline-block mt-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest ${c.kolVal >= 3 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>KOL {c.kol_tdy || '-'}</span>
-                          </div>
-                        </div>
-                      ))
-                    ) : <div className="text-center py-6 text-slate-400 text-sm font-medium bg-white rounded-2xl border border-slate-100 shadow-sm">Tidak ada tugas prioritas.</div>}
-                  </div>
-                </section>
 
                 <section className="pt-4 pb-2">
                   <div className="flex justify-between items-center mb-4">
