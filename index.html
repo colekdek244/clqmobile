@@ -238,7 +238,7 @@
     // tetap mengarah ke server produksi.
     const API_DASAR = (window.CLQ_API_UJI === true)
       ? "http://127.0.0.1:8803"
-      : "https://clq-portal.colekdek244.workers.dev";
+      : "https://clqportal.244.my.id";   // workers.dev diblokir di sebagian jaringan operator HP
 
     const ambilToken = () => {
       try { return localStorage.getItem('clq_token') || ''; } catch (e) { return ''; }
@@ -442,7 +442,7 @@
         if (!window.CLQAndroid || !window.CLQAndroid.setKredensial) return;
         const t = ambilToken();
         if (!t) return;
-        const dasar = window.CLQ_API_UJI === true ? 'http://127.0.0.1:8803/api/mobile' : 'https://clq-portal.colekdek244.workers.dev/api/mobile';
+        const dasar = window.CLQ_API_UJI === true ? 'http://127.0.0.1:8803/api/mobile' : 'https://clqportal.244.my.id/api/mobile';
         window.CLQAndroid.setKredensial(dasar + '/posisi', t);
       } catch (e) {}
     };
