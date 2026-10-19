@@ -1277,18 +1277,57 @@
         handleFetchReport();
       }, [appUser]);
 
+      // ============================================================
+      // BANNER "INSTAL" — KHUSUS iOS
+      //
+      // Alasan: aplikasi ini akan dirilis sebagai APK Android, jadi tidak perlu
+      // mengajak pengguna Android memasang versi web. Di Android banner juga
+      // muncul setiap kali aplikasi dibuka dan mengganggu petugas.
+      // Di iOS (iPhone/iPad) TIDAK ada APK, jadi di sanalah ajakan "Pasang di
+      // layar utama" justru berguna.
+      //
+      // Banner juga tidak muncul lagi setelah petugas menekan X (diingat 60 hari)
+      // atau setelah aplikasi benar-benar terpasang.
+      // ============================================================
+      const hanyaIOS = () => {
+        const ua = navigator.userAgent || '';
+        const ios = /iPad|iPhone|iPod/.test(ua) ||
+          (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS 13+
+        const android = /Android/i.test(ua);
+        return ios && !android;
+      };
+      const sudahTerpasang = () =>
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true;
+
       useEffect(() => {
-        const handleBeforeInstallPrompt = (e) => {
-          e.preventDefault();
-          setDeferredPrompt(e);
-          setShowInstallBanner(true);
-        };
-        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-        window.addEventListener('appinstalled', () => {
+        if (!hanyaIOS()) return;                      // Android/desktop: tidak pernah tampil
+        if (sudahTerpasang()) return;                 // sudah dipasang: tidak perlu ajakan
+        try {
+          const tolak = localStorage.getItem('clq_instal_ditolak');
+          if (tolak && Date.now() - Number(tolak) < 60 * 24 * 3600 * 1000) return;
+        } catch (e) { /* mode privat */ }
+
+        // Safari iOS TIDAK pernah mengirim `beforeinstallprompt`, jadi banner
+        // tidak boleh bergantung pada event itu — kalau bergantung, bannernya
+        // tidak akan pernah muncul di iPhone.
+        setShowInstallBanner(true);
+
+        const sudahDipasang = () => {
           setShowInstallBanner(false);
           setDeferredPrompt(null);
-        });
-        return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        };
+        window.addEventListener('appinstalled', sudahDipasang);
+
+        // sembunyikan otomatis kalau petugas memasang lewat menu Bagikan
+        const lepas = window.matchMedia('(display-mode: standalone)');
+        const cekMode = () => { if (lepas.matches) setShowInstallBanner(false); };
+        if (lepas.addEventListener) lepas.addEventListener('change', cekMode);
+
+        return () => {
+          window.removeEventListener('appinstalled', sudahDipasang);
+          if (lepas.removeEventListener) lepas.removeEventListener('change', cekMode);
+        };
       }, []);
 
       const handleInstallClick = async () => {
@@ -1623,16 +1662,16 @@
                      <img src="/vendor/logo-btn.png" alt="Icon" className="w-12 h-8 object-contain" />
                    </div>
                    <div>
-                     <h4 className="font-black text-sm leading-tight">Instal CLQ Mobile</h4>
-                     <p className="text-[10px] text-blue-100 mt-0.5 leading-snug font-medium">Pasang di layar utama HP agar lebih cepat & mendukung fitur offline kamera.</p>
+                     <h4 className="font-black text-sm leading-tight">Pasang di Layar Utama</h4>
+                     <p className="text-[10px] text-blue-100 mt-0.5 leading-snug font-medium">iPhone: ketuk ikon <b>Bagikan</b> (kotak dengan panah ke atas), lalu pilih <b>Tambahkan ke Layar Utama</b>.</p>
                    </div>
                  </div>
-                 <button onClick={() => setShowInstallBanner(false)} className="p-1.5 bg-blue-900/40 rounded-full hover:bg-blue-900/60 transition-colors shrink-0">
+                 <button onClick={() => { setShowInstallBanner(false); try { localStorage.setItem('clq_instal_ditolak', String(Date.now())); } catch (e) {} }} className="p-1.5 bg-blue-900/40 rounded-full hover:bg-blue-900/60 transition-colors shrink-0">
                    <X className="w-4 h-4 text-blue-100" />
                  </button>
                </div>
-               <button onClick={handleInstallClick} className="w-full bg-white text-blue-700 font-black py-3.5 rounded-2xl text-xs uppercase tracking-widest hover:bg-blue-50 active:scale-95 transition-all shadow-md mt-1">
-                  Instal Sekarang
+               <button onClick={() => { setShowInstallBanner(false); try { localStorage.setItem('clq_instal_ditolak', String(Date.now())); } catch (e) {} }} className="w-full bg-white text-blue-700 font-black py-3.5 rounded-2xl text-xs uppercase tracking-widest hover:bg-blue-50 active:scale-95 transition-all shadow-md mt-1">
+                  Mengerti
                </button>
             </div>
           )}
