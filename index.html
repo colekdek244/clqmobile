@@ -319,7 +319,15 @@
               simpanToken(r.token);
               // Teruskan penanda wajib ganti password; tanpa ini aplikasi
               // langsung masuk padahal server menandai token sebagai terbatas.
-              return { status: 'success', user: r.user, wajib_ganti_password: r.wajib_ganti_password === true };
+              return {
+                status: 'success',
+                user: r.user,
+                wajib_ganti_password: r.wajib_ganti_password === true,
+                // Server melaporkan HP yang dipakai sebelumnya. Akun yang sama
+                // hanya bisa aktif di satu HP pada satu waktu, jadi petugas
+                // diberi tahu — supaya tidak bingung kenapa HP lama berhenti.
+                login_hp_baru: r.login_hp_baru || null,
+              };
             }
             // Akun yang password-nya wajib diganti ditolak server (409 GANTI_PASSWORD).
             // Beri pesan tegas supaya petugas tahu harus lewat browser dulu,
@@ -422,6 +430,21 @@
           waktu: null,   // server yang mencatat waktu
         },
       });
+    };
+
+    /**
+     * Lapisan Android (APK) mendaftarkan jembatan ini untuk menerima token,
+     * supaya Service pelacakan latar belakang bisa mengirim posisi. Di browser
+     * biasa jembatan ini tidak ada, jadi semua baris di bawah dibungkus try.
+     */
+    const kirimKredensialKeAndroid = () => {
+      try {
+        if (!window.CLQAndroid || !window.CLQAndroid.setKredensial) return;
+        const t = ambilToken();
+        if (!t) return;
+        const dasar = window.CLQ_API_UJI === true ? 'http://127.0.0.1:8803/api/mobile' : 'https://clq-portal.colekdek244.workers.dev/api/mobile';
+        window.CLQAndroid.setKredensial(dasar + '/posisi', t);
+      } catch (e) {}
     };
 
     /** Upload foto (base64) ke server, dapat kunci penyimpanan. */
@@ -1145,6 +1168,24 @@
               setIsLoggingIn(false);
               return;
             }
+
+            // Teruskan token ke APK (kalau dibuka lewat aplikasi Android) supaya
+            // pelacakan latar belakang bisa dimulai.
+            kirimKredensialKeAndroid();
+
+            // Peringatan HP baru: hanya petugas, bukan admin/atasan yang sering
+            // login di beberapa perangkat. Ditampilkan sekali per login.
+            try {
+              if (res.login_hp_baru) {
+                const hp = res.login_hp_baru.nama_perangkat
+                  ? String(res.login_hp_baru.nama_perangkat).slice(0, 60)
+                  : 'perangkat lain';
+                setTimeout(() => {
+                  window.alert('Anda login di perangkat ini.\n\nPerangkat sebelumnya: ' + hp +
+                    '\n\nAkun hanya aktif di satu HP. HP lama sudah berhenti mengirim data dan posisi.');
+                }, 300);
+              }
+            } catch (e) {}
 
             setAppUser(safeUser);
             setUser({ uid: 'session-active' });
