@@ -463,6 +463,44 @@
       } catch (e) {}
     };
 
+    /**
+     * Panel diagnosa pelacakan — HANYA muncul saat dibuka lewat APK.
+     * Dipakai untuk memastikan service latar berjalan di HP sungguhan tanpa
+     * kabel USB dan tanpa notifikasi. Di browser biasa panel ini tidak ada.
+     */
+    const PanelPelacakan = () => {
+      const [info, setInfo] = React.useState('');
+      const [buka, setBuka] = React.useState(false);
+      const tersedia = typeof window !== 'undefined' && window.CLQAndroid && window.CLQAndroid.statusPelacakan;
+
+      React.useEffect(() => {
+        if (!tersedia) return;
+        const baca = () => { try { setInfo(String(window.CLQAndroid.statusPelacakan())); } catch (e) { setInfo('gagal membaca status'); } };
+        baca();
+        const t = setInterval(baca, 5000);
+        return () => clearInterval(t);
+      }, [tersedia]);
+
+      if (!tersedia) return null;
+      return (
+        <div className="fixed bottom-0 left-0 right-0 z-40 text-[11px]">
+          <button onClick={() => setBuka(!buka)} className="w-full bg-slate-800 text-slate-300 px-3 py-1 text-left">
+            {buka ? '▾' : '▸'} Status pelacakan
+          </button>
+          {buka && (
+            <div className="bg-slate-900 text-emerald-300 px-3 py-2 font-mono whitespace-pre-wrap">
+              {info}
+              <button
+                onClick={() => { try { window.CLQAndroid.bukaIzin(); } catch (e) {} }}
+                className="mt-2 block bg-slate-700 text-white px-3 py-1 rounded">
+                Buka izin aplikasi
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    };
+
     /** Upload foto (base64) ke server, dapat kunci penyimpanan. */
     const kirimFoto = async (base64, jenis) => {
       if (!ambilToken() || !base64) return null;
@@ -1641,7 +1679,7 @@
 
       return (
         <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 md:pb-32 font-sans max-w-md mx-auto shadow-2xl ring-1 ring-gray-200 flex flex-col relative overflow-hidden">
-          
+          <PanelPelacakan />
           {previewPhoto && (
             <div className="fixed inset-0 z-[9999999] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md animate-in fade-in duration-200" onClick={tutupFoto}>
               <div className="relative w-full max-w-sm h-auto max-h-[90vh] flex flex-col items-center justify-center" onClick={e => e.stopPropagation()}>
