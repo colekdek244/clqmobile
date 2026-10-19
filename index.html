@@ -487,7 +487,11 @@
         return () => clearInterval(t);
       }, []);
 
-      if (!tersedia) return null;
+      // Selalu tampilkan pintu masuk panel di APK, walau jembatan belum terbaca.
+      // Dulu panel disembunyikan total kalau jembatan absen -> tidak ada cara
+      // mengetahui apakah APK benar memuat kode ini.
+      const diApk = /CLQApp\//.test(navigator.userAgent || '');
+      if (!tersedia && !diApk && !window.CLQAndroid) return null;
       return (
         <div className="fixed bottom-0 left-0 right-0 z-40 text-[11px]">
           <button onClick={() => setBuka(!buka)} className="w-full bg-slate-800 text-slate-300 px-3 py-1 text-left">
@@ -495,7 +499,7 @@
           </button>
           {buka && (
             <div className="bg-slate-900 text-emerald-300 px-3 py-2 font-mono whitespace-pre-wrap">
-              {info}
+              {info || 'Jembatan Android tidak terbaca. Ketuk "Buka izin aplikasi" lalu buka ulang aplikasi.'}
               <button
                 onClick={() => { try { window.CLQAndroid.bukaIzin(); } catch (e) {} }}
                 className="mt-2 block bg-slate-700 text-white px-3 py-1 rounded">
