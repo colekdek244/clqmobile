@@ -358,6 +358,12 @@
             // >500 tidak lagi kehilangan nama/alamat untuk tugas di luar 500 pertama.
             return panggilApi('/api/mobile/debitur?limit=500&hanya_tugas=1');
 
+          case 'get_bayar': {
+            // Debitur yang sudah bayar HARI INI, hanya dari kelolaan petugas ini.
+            const r = await panggilApi('/api/mobile/bayar');
+            return r;
+          }
+
           case 'get_report': {
             const q = [];
             if (payload.date_from) q.push('dari=' + encodeURIComponent(payload.date_from));
@@ -846,7 +852,9 @@
              if (res.priorityTasks) setPriorityTasks(res.priorityTasks);
              // Server tidak mengirim todayReport (kode ini memang sudah mati).
              // Laporan diambil lewat handleFetchReport pada useEffect di bawah.
-             if (res.bayarList) setBayarData(res.bayarList);
+             // Server TIDAK mengirim bayarList (kunci ini memang tidak pernah ada).
+             // Daftar bayar diambil lewat aksi get_bayar: hanya debitur di
+             // kelolaan petugas ini yang membayar HARI INI.
              if (res.clusterName) {
                 setClusterName(res.clusterName);
                 localStorage.setItem('clq_cluster_name', res.clusterName);
@@ -866,6 +874,27 @@
         } finally { 
            setIsFetchingStats(false); 
            setIsFetchingReport(false);
+        }
+      };
+
+      // Debitur yang sudah bayar HARI INI (hanya kelolaan petugas ini).
+      const handleFetchBayar = async () => {
+        if (!appUser) return;
+        try {
+          const res = await callApi('get_bayar');
+          if (res && res.status === 'success') {
+            setBayarData((res.data || []).map(b => ({
+              acctno: b.acctno,
+              sname: b.sname || 'Tanpa Nama',
+              lpdloc: b.lpdloc || 'TIDAK DIKETAHUI',
+              kol_tdy: b.kol_tdy_kode != null ? String(b.kol_tdy_kode) : '-',
+              so_pokok_tdy: b.so_pokok_tdy || 0,
+              tgk_angsuran: b.tgk_angsuran || 0,
+              tglupdate: b.tglupdate,
+            })));
+          }
+        } catch (e) {
+          // jangan ganggu tampilan utama kalau bagian ini gagal
         }
       };
 
@@ -1275,6 +1304,7 @@
         if (!appUser || laporanSudahDiambil.current) return;
         laporanSudahDiambil.current = true;
         handleFetchReport();
+        handleFetchBayar();
       }, [appUser]);
 
       // ============================================================
@@ -1917,7 +1947,10 @@
 
                 <section className="pt-4 pb-2">
                   <div className="flex justify-between items-center mb-4">
-                    <h2 className="font-bold text-slate-800">Debitur Sudah Bayar</h2>
+                    <div>
+                      <h2 className="font-bold text-slate-800">Debitur Sudah Bayar</h2>
+                      <p className="text-[10px] text-slate-400 font-medium mt-0.5">Hari ini &middot; kelolaan Anda</p>
+                    </div>
                     <span className="bg-emerald-50 text-emerald-700 text-[10px] font-black px-2.5 py-1 rounded-xl uppercase tracking-widest">{bayarData.length} Nasabah</span>
                   </div>
                   {isFetchingStats && bayarData.length === 0 ? (
@@ -1945,7 +1978,7 @@
                   ) : (
                     <div className="text-center py-8 text-slate-400 text-sm font-medium bg-white rounded-[2rem] border border-slate-100 shadow-sm flex flex-col items-center gap-2">
                       <CheckCircle className="w-8 h-8 text-slate-200" />
-                      Belum ada data bayar.
+                      Belum ada debitur Anda yang membayar hari ini.
                     </div>
                   )}
                 </section>
