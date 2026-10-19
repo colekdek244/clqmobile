@@ -303,6 +303,22 @@
      * Lapisan kompatibilitas: nama aksi lama -> endpoint baru.
      * Dipertahankan supaya bagian lain aplikasi tidak perlu diubah semua.
      */
+    /**
+     * Nama perangkat yang manusiawi untuk dicatat server.
+     * User agent penuh tidak berguna di peringatan ("Mozilla/5.0 (Linux; Android 16..."),
+     * jadi diambil model HP saja: "Android 14 · POCO X6 Pro".
+     */
+    const namaPerangkatRingkas = () => {
+      try {
+        const ua = navigator.userAgent || '';
+        const android = ua.match(/Android\s+([\d.]+)/i);
+        const model = ua.match(/;\s*([^;)]+?)\s*(?:Build|\/)/i);
+        const androidNama = android ? 'Android ' + android[1] : (window.CLQ_APP ? 'Aplikasi CLQ' : 'Browser');
+        const namaModel = model && model[1] && !/^wv$/i.test(model[1].trim()) ? model[1].trim() : '';
+        return (androidNama + (namaModel ? ' \u00b7 ' + namaModel : '')).slice(0, 60);
+      } catch (e) { return 'Perangkat HP'; }
+    };
+
     const callApi = async (action, payload = {}) => {
       try {
         switch (action) {
@@ -312,7 +328,7 @@
               body: {
                 id_user: payload.id_user,
                 password: payload.password,
-                nama_perangkat: (navigator.userAgent || '').slice(0, 100),
+                nama_perangkat: namaPerangkatRingkas(),
               },
             });
             if (r.status === 'success' && r.token) {
