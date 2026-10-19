@@ -1189,19 +1189,9 @@
             // pelacakan latar belakang bisa dimulai.
             kirimKredensialKeAndroid();
 
-            // Peringatan HP baru: hanya petugas, bukan admin/atasan yang sering
-            // login di beberapa perangkat. Ditampilkan sekali per login.
-            try {
-              if (res.login_hp_baru) {
-                const hp = res.login_hp_baru.nama_perangkat
-                  ? String(res.login_hp_baru.nama_perangkat).slice(0, 60)
-                  : 'perangkat lain';
-                setTimeout(() => {
-                  window.alert('Anda login di perangkat ini.\n\nPerangkat sebelumnya: ' + hp +
-                    '\n\nAkun hanya aktif di satu HP. HP lama sudah berhenti mengirim data dan posisi.');
-                }, 300);
-              }
-            } catch (e) {}
+            // Pop-up "login di perangkat ini" DIHAPUS (permintaan pemilik, 19 Okt):
+            // tampilannya mengganggu petugas tiap login. Datanya tetap dikirim server
+            // (login_hp_baru) kalau suatu saat perlu ditampilkan lagi di tempat lain.
 
             setAppUser(safeUser);
             setUser({ uid: 'session-active' });
