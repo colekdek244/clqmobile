@@ -554,6 +554,48 @@
       const [reportFilterDateStart, setReportFilterDateStart] = useState(() => tanggalMundur(6));
       const [reportFilterDateEnd, setReportFilterDateEnd] = useState(() => getLocalDateStr());
       const [previewPhoto, setPreviewPhoto] = useState(null);
+
+      // ============================================================
+      // PRATINJAU FOTO & TOMBOL BACK HP
+      //
+      // Masalah lapangan: saat foto dibuka penuh, menekan tombol BACK membuat
+      // aplikasi ikut keluar (kembali ke halaman web sebelum aplikasi dibuka),
+      // bukan menutup fotonya. Penyebabnya: membuka foto TIDAK menambah riwayat
+      // browser, jadi tombol back memakai riwayat sebelumnya.
+      //
+      // Solusi: saat foto dibuka, dorong satu riwayat tiruan (history.pushState).
+      // Tombol back akan memakai riwayat itu -> kita tangkap lewat popstate ->
+      // foto ditutup dan aplikasi tetap di tempatnya.
+      // Tombol X / klik latar / Escape juga memakai history.back() supaya
+      // riwayat tiruan ikut dibersihkan (tidak ada tumpukan menumpuk).
+      // ============================================================
+      const bukaFoto = (url) => {
+        try {
+          if (!previewPhoto) window.history.pushState({ pratinjauFoto: true }, '');
+        } catch (e) { /* mode privat / iOS lama */ }
+        setPreviewPhoto(url);
+      };
+
+      const tutupFoto = () => {
+        try {
+          if (window.history.state && window.history.state.pratinjauFoto) {
+            window.history.back();  // popstate akan menutup pratinjau
+            return;
+          }
+        } catch (e) { /* abaikan */ }
+        setPreviewPhoto(null);
+      };
+
+      useEffect(() => {
+        const tangkap = () => setPreviewPhoto(null);
+        const tombolEsc = (e) => { if (e.key === 'Escape' && previewPhoto) tutupFoto(); };
+        window.addEventListener('popstate', tangkap);
+        window.addEventListener('keydown', tombolEsc);
+        return () => {
+          window.removeEventListener('popstate', tangkap);
+          window.removeEventListener('keydown', tombolEsc);
+        };
+      }, [previewPhoto]);
       const [expandedReportLokasi, setExpandedReportLokasi] = useState({});
 
       const [wakeLock, setWakeLock] = useState(null);
@@ -1493,9 +1535,9 @@
         <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 md:pb-32 font-sans max-w-md mx-auto shadow-2xl ring-1 ring-gray-200 flex flex-col relative overflow-hidden">
           
           {previewPhoto && (
-            <div className="fixed inset-0 z-[9999999] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md animate-in fade-in duration-200" onClick={() => setPreviewPhoto(null)}>
+            <div className="fixed inset-0 z-[9999999] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md animate-in fade-in duration-200" onClick={tutupFoto}>
               <div className="relative w-full max-w-sm h-auto max-h-[90vh] flex flex-col items-center justify-center" onClick={e => e.stopPropagation()}>
-                <button onClick={() => setPreviewPhoto(null)} className="absolute -top-14 right-0 text-white hover:text-red-400 bg-slate-800 rounded-full p-2.5 transition-colors cursor-pointer shadow-lg">
+                <button onClick={tutupFoto} className="absolute -top-14 right-0 text-white hover:text-red-400 bg-slate-800 rounded-full p-2.5 transition-colors cursor-pointer shadow-lg">
                   <X className="w-6 h-6" />
                 </button>
                 <div className="bg-slate-950 p-2 rounded-3xl w-full flex justify-center items-center overflow-hidden border border-slate-800">
@@ -1774,13 +1816,13 @@
                                         <div className="flex gap-2 items-center">
                                             {/* FOTO MINI: langsung terlihat, klik untuk ukuran penuh */}
                                             {fotoRumah && (
-                                              <button onClick={() => setPreviewPhoto(fotoRumah)} title="Foto Rumah — ketuk untuk perbesar" className="relative w-14 h-14 rounded-xl overflow-hidden border-2 border-blue-200 shadow-sm active:scale-95 transition-transform">
+                                              <button onClick={() => bukaFoto(fotoRumah)} title="Foto Rumah — ketuk untuk perbesar" className="relative w-14 h-14 rounded-xl overflow-hidden border-2 border-blue-200 shadow-sm active:scale-95 transition-transform">
                                                 <img src={fotoRumah} alt="Foto Rumah" loading="lazy" className="w-full h-full object-cover" />
                                                 <span className="absolute bottom-0 inset-x-0 bg-blue-600/85 text-white text-[7px] font-black text-center py-0.5 tracking-wide">RUMAH</span>
                                               </button>
                                             )}
                                             {fotoTindakan && (
-                                              <button onClick={() => setPreviewPhoto(fotoTindakan)} title="Foto Tindakan — ketuk untuk perbesar" className="relative w-14 h-14 rounded-xl overflow-hidden border-2 border-purple-200 shadow-sm active:scale-95 transition-transform">
+                                              <button onClick={() => bukaFoto(fotoTindakan)} title="Foto Tindakan — ketuk untuk perbesar" className="relative w-14 h-14 rounded-xl overflow-hidden border-2 border-purple-200 shadow-sm active:scale-95 transition-transform">
                                                 <img src={fotoTindakan} alt="Foto Tindakan" loading="lazy" className="w-full h-full object-cover" />
                                                 <span className="absolute bottom-0 inset-x-0 bg-purple-600/85 text-white text-[7px] font-black text-center py-0.5 tracking-wide">TINDAKAN</span>
                                               </button>
