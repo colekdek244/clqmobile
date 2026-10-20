@@ -474,11 +474,18 @@
     /** Upload foto (base64) ke server, dapat kunci penyimpanan. */
     const kirimFoto = async (base64, jenis) => {
       if (!ambilToken() || !base64) return null;
-      const r = await panggilApi('/api/mobile/foto', {
-        method: 'POST',
-        body: { data: base64, jenis },
-      });
-      return (r && r.status === 'success') ? r.kunci : null;
+      try {
+        const r = await panggilApi('/api/mobile/foto', {
+          method: 'POST',
+          body: { data: base64, jenis },
+        });
+        return (r && r.status === 'success') ? r.kunci : null;
+      } catch (e) {
+        // Foto gagal diunggah: jangan sampai seluruh penyimpanan kunjungan
+        // ikut gagal karena ini (dulu error di sini menggagalkan submit).
+        console.warn('Upload foto gagal:', e);
+        return null;
+      }
     };
 
     /** Ambil persen baterai (kalau API tersedia di HP). */
@@ -861,9 +868,13 @@
         const v = elemenVideo.current;
         const field = kamera.field;
         if (!v || !v.videoWidth) {
-          // Kamera in-app tidak tersedia -> pakai kamera bawaan HP.
-          const el = document.getElementById('cadangan_kamera');
-          if (el) el.click();
+          // Kamera in-app belum/tidak tersedia -> kalau sudah siap pakai,
+          // beri tahu; kalau memang gagal, pakai kamera bawaan HP.
+          if (!kamera.siap) {
+            const el = document.getElementById('cadangan_kamera');
+            if (el) el.click();
+            return;
+          }
           return;
         }
         try {
