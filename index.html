@@ -926,15 +926,39 @@
           const stream = await Promise.race([minta, batas]);
           minta.then(st => { if (aliranKamera.current !== st) { try { st.getTracks().forEach(t => t.stop()); } catch (e) {} } }).catch(() => {});
           aliranKamera.current = stream;
-          const v = elemenVideo.current;
-          if (v) {
-            v.srcObject = stream;
-            await v.play().catch(() => {});
+          // "Siap" hanya setelah video benar-benar punya ukuran gambar —
+          // kalau tidak, layar hitam tapi tombol sudah aktif.
+          const pasang = (el) => {
+            if (!el || !stream) return;
+            el.srcObject = stream;
+            el.muted = true;
+            el.setAttribute('playsinline', '');
+            el.setAttribute('webkit-playsinline', '');
+            const main = () => { el.play && el.play().catch(() => {}); };
+            main();
+            setTimeout(main, 350);
+            setTimeout(main, 1200);
+          };
+          pasang(elemenVideo.current);
+          const mulai = Date.now();
+          while (Date.now() - mulai < 5000) {
+            const el = elemenVideo.current;
+            if (el && el.videoWidth > 0 && !el.paused) break;
+            await new Promise(r => setTimeout(r, 200));
           }
-          setKamera(k => ({ ...k, siap: true, pesan: '' }));
+          const v2 = elemenVideo.current;
+          if (v2 && v2.videoWidth > 0) {
+            setKamera(k => ({ ...k, siap: true, pesan: '' }));
+          } else {
+            const tr = stream.getVideoTracks()[0];
+            const nama = tr ? (tr.label || 'tanpa nama') : 'tidak ada track';
+            throw new Error('gambar_tidak_muncul (' + nama + ')');
+          }
         } catch (err) {
           const m = String((err && err.message) || err);
-          const pesan = m === 'izin_diam'
+          const pesan = m.startsWith('gambar_tidak_muncul')
+            ? 'Kamera terbuka tapi gambar tidak masuk ke aplikasi. Ketuk Jepret untuk memakai kamera bawaan HP.'
+            : m === 'izin_diam'
             ? 'Izin kamera belum dijawab. Cek notifikasi/ikon kamera di HP, atau ketuk Jepret untuk memakai kamera bawaan HP.'
             : /NotAllowed|Permission|denied/i.test(m)
               ? 'Izin kamera ditolak. Buka Pengaturan HP > Aplikasi > CLQ Mobile > Izin > Kamera, lalu buka ulang aplikasi. Sementara itu ketuk Jepret untuk memakai kamera bawaan HP.'
@@ -949,6 +973,16 @@
         if (kamera.buka) nyalakanKamera(kamera.kamera);
         return () => tutupAliran();
       }, [kamera.buka]);
+
+      // Elemen <video> bisa dipasang ulang oleh React (layar berganti) — aliran
+      // tetap hidup, jadi tempelkan lagi supaya gambar tidak jadi hitam.
+      React.useEffect(() => {
+        const el = elemenVideo.current;
+        if (kamera.buka && el && aliranKamera.current && !el.srcObject) {
+          el.srcObject = aliranKamera.current;
+          el.play && el.play().catch(() => {});
+        }
+      });
 
       const handlePhoto = async (e, field) => {
         const file = e.target.files[0];
