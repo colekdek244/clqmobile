@@ -2186,7 +2186,7 @@
                 <div className="flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
                   <div>
                     <h2 className="text-xl font-black text-slate-800">Daftar Visit</h2>
-                    <p className="text-xs text-slate-400 mt-1">Nasabah pending untuk Anda.</p>
+                    <p className="text-xs text-slate-400 mt-1">Tugas yang belum dikunjungi.</p>
                   </div>
                   <button onClick={fetchVisitData} className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 transition-all font-bold flex items-center gap-2">
                     <RefreshCw className={`w-5 h-5 ${isFetchingVisit ? 'animate-spin' : ''}`} />
@@ -2295,7 +2295,7 @@
                     ))
                   ) : (
                     <div className="text-center py-10 text-slate-400 text-sm font-medium bg-white rounded-[2.5rem] border border-slate-100 shadow-sm">
-                      Belum ada data visit pending untuk Anda.
+                      Semua tugas selesai. Kunjungan yang sudah disimpan tidak lagi tampil di sini — lihat di menu Laporan.
                     </div>
                   )}
                 </div>
