@@ -1,6 +1,6 @@
 // v13: pustaka dipindah ke /vendor (tidak lagi dari CDN). Naikkan versi ini
 // setiap deploy agar cache lama di HP terhapus dan versi baru terpakai.
-const CACHE_NAME = "clqmobile-v22";
+const CACHE_NAME = "clqmobile-v23";
 
 // Hanya berkas dari server sendiri. Dulu daftar ini berisi CDN pihak ketiga;
 // bila salah satunya diblokir, cache gagal terisi dan aplikasi tampil putih.

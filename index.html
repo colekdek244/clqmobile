@@ -902,10 +902,15 @@
           if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             throw new Error('Perangkat/browser tidak mendukung kamera in-app.');
           }
-          const stream = await navigator.mediaDevices.getUserMedia({
+          // Jeda sebentar memberi waktu dialog izin muncul; jangan digantung
+          // selamanya kalau izin tidak pernah dijawab (halaman dianggap macet).
+          const minta = navigator.mediaDevices.getUserMedia({
             video: { facingMode: { ideal: sisi }, width: { ideal: 1920 }, height: { ideal: 1080 } },
             audio: false,
           });
+          const batas = new Promise((_, tolak) => setTimeout(() => tolak(new Error('izin_diam')), 20000));
+          const stream = await Promise.race([minta, batas]);
+          minta.then(st => { if (aliranKamera.current !== st) { try { st.getTracks().forEach(t => t.stop()); } catch (e) {} } }).catch(() => {});
           aliranKamera.current = stream;
           const v = elemenVideo.current;
           if (v) {
@@ -915,7 +920,12 @@
           setKamera(k => ({ ...k, siap: true, pesan: '' }));
         } catch (err) {
           const m = String((err && err.message) || err);
-          setKamera(k => ({ ...k, siap: false, pesan: 'Kamera tidak bisa dibuka: ' + m }));
+          const pesan = m === 'izin_diam'
+            ? 'Izin kamera belum dijawab. Cek notifikasi/ikon kamera di HP, atau ketuk Jepret untuk memakai kamera bawaan HP.'
+            : /NotAllowed|Permission|denied/i.test(m)
+              ? 'Izin kamera ditolak. Buka Pengaturan HP > Aplikasi > CLQ Mobile > Izin > Kamera, lalu buka ulang aplikasi. Sementara itu ketuk Jepret untuk memakai kamera bawaan HP.'
+              : 'Kamera tidak bisa dibuka (' + m + '). Ketuk Jepret untuk memakai kamera bawaan HP.';
+          setKamera(k => ({ ...k, siap: false, pesan }));
         }
       };
 
