@@ -530,6 +530,10 @@
 
       const [visitData, setVisitData] = useState([]);
       const [isFetchingVisit, setIsFetchingVisit] = useState(false);
+      // Kamera in-app: { buka, field, siap, pesan, kamera }
+      const [kamera, setKamera] = useState({ buka: false, field: null, siap: false, pesan: '', kamera: 'environment' });
+      const elemenVideo = React.useRef(null);
+      const aliranKamera = React.useRef(null);
       const [activeVisitCustomer, setActiveVisitCustomer] = useState(null);
       const [visitFormData, setVisitFormData] = useState({});
       const [isSavingVisitForm, setIsSavingVisitForm] = useState(false);
@@ -749,28 +753,50 @@
         }
       };
 
-      const handlePhoto = async (e, field) => {
-        const file = e.target.files[0];
-        if (!file) return;
 
-        if (file.type.startsWith('image/')) {
-          try {
-            let img; let width, height;
-            if (window.createImageBitmap) { 
-              img = await createImageBitmap(file, { imageOrientation: 'from-image' }); 
-              width = img.width; height = img.height; 
-            } else {
-              const dataUrl = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = (ev) => resolve(ev.target.result); reader.readAsDataURL(file); });
-              img = new Image(); await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; }); 
-              width = img.width; height = img.height;
-            }
+      // ---- LAYAR KAMERA (in-app) ----
+      const LapisanKamera = () => {
+        const v = elemenVideo.current;
+        if (!kamera.buka || !kamera.field) return null;
+        return (
+          <div className="fixed inset-0 z-[99999999] bg-black flex flex-col">
+            <div className="relative flex-1 overflow-hidden bg-black">
+              <video ref={elemenVideo} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
+              {kamera.pesan && (
+                <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-white text-sm bg-black/70">
+                  <div className="space-y-3">
+                    <p>{kamera.pesan}</p>
+                    <p className="text-[11px] text-slate-400">Izinkan kamera saat diminta. Kalau tetap gagal, ketuk tombol Jepret untuk memakai kamera bawaan HP.</p>
+                  </div>
+                </div>
+              )}
+              <button type="button" onClick={tutupKamera} className="absolute top-4 right-4 bg-black/60 text-white px-4 py-2 rounded-full text-sm font-bold">Batal</button>
+              <div className="absolute top-4 left-4 bg-black/60 text-white px-3 py-1 rounded-full text-[11px] font-bold">{kamera.field}</div>
+            </div>
+            <div className="h-28 flex items-center justify-around bg-black pb-4" style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}>
+              <button type="button" onClick={gantiKamera} disabled={!kamera.siap} className="text-white/80 text-xs font-bold px-4 py-3 disabled:opacity-30">Putar kamera</button>
+              <button type="button" onClick={tangkapKamera} disabled={!kamera.siap} className="w-20 h-20 rounded-full bg-white border-8 border-slate-400 active:scale-95 transition-transform disabled:opacity-30" aria-label="Jepret" />
+              <input id="cadangan_kamera" type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { const f = kamera.field; tutupKamera(); e.target.files[0] && handlePhoto(e, f); }} />
+              <button type="button" onClick={() => { const el = document.getElementById('cadangan_kamera'); if (el) el.click(); }} className="text-white/80 text-xs font-bold px-4 py-3">Kamera HP</button>
+            </div>
+          </div>
+        );
+      };
 
-            const MAX_DIMENSION = 600; let scale = 1;
+      // ---- KAMERA IN-APP ----
+      // Kamera dibuka di dalam aplikasi (getUserMedia), bukan aplikasi kamera
+      // bawaan HP. Hasilnya memakai alur watermark yang sama dengan input file.
+      const bukaKamera = (field) => {
+        setKamera({ buka: true, field, siap: false, pesan: '', kamera: 'environment' });
+      };
+
+      const gambarKeKanvas = async (sumber, width, height, field) => {
+            const MAX_DIMENSION = 1080; let scale = 1;
             if (width > height && width > MAX_DIMENSION) scale = MAX_DIMENSION / width;
             else if (height >= width && height > MAX_DIMENSION) scale = MAX_DIMENSION / height;
 
             const canvas = document.createElement('canvas'); canvas.width = width * scale; canvas.height = height * scale;
-            const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const ctx = canvas.getContext('2d'); ctx.drawImage(sumber, 0, 0, canvas.width, canvas.height);
             
             const watermarkHeight = canvas.height * 0.30; const blockHeight = watermarkHeight / 3; const startY = canvas.height - watermarkHeight; const padX = canvas.width * 0.04; 
             const fontFamily = 'Cairo, sans-serif'; ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 6; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2; 
@@ -826,15 +852,103 @@
             ctx.fillStyle = '#fbbf24'; ctx.textBaseline = 'top'; fillTextFit(baris3, padX, block3Y + (blockHeight * 0.70), maxTextW, blockHeight * 0.20, '500');
             ctx.textBaseline = 'alphabetic';
 
-            const finalData = canvas.toDataURL('image/jpeg', 0.6);
-            setVisitFormData(prev => ({...prev, [field]: finalData}));
+            return canvas.toDataURL('image/jpeg', 0.8);
 
-          } catch (err) { 
-            console.error(err); 
-            showNotification('error', 'Gagal Memproses Gambar', 'Pastikan perangkat mendukung fitur ini.'); 
+
+      };
+
+      const tangkapKamera = async () => {
+        const v = elemenVideo.current;
+        const field = kamera.field;
+        if (!v || !v.videoWidth) {
+          // Kamera in-app tidak tersedia -> pakai kamera bawaan HP.
+          const el = document.getElementById('cadangan_kamera');
+          if (el) el.click();
+          return;
+        }
+        try {
+          const hasil = await gambarKeKanvas(v, v.videoWidth, v.videoHeight, field);
+          tutupKamera();
+          if (hasil) setVisitFormData(prev => ({ ...prev, [field]: hasil }));
+        } catch (err) {
+          console.error(err);
+          showNotification('error', 'Gagal Memproses Gambar', 'Memori perangkat mungkin penuh.');
+        }
+      };
+
+      const tutupKamera = () => {
+        const s = aliranKamera.current;
+        if (s) { try { s.getTracks().forEach(t => t.stop()); } catch (e) {} }
+        aliranKamera.current = null;
+        setKamera({ buka: false, field: null, siap: false, pesan: '', kamera: 'environment' });
+      };
+
+      const gantiKamera = () => {
+        const baru = kamera.kamera === 'environment' ? 'user' : 'environment';
+        tutupAliran();
+        nyalakanKamera(baru);
+      };
+
+      const tutupAliran = () => {
+        const s = aliranKamera.current;
+        if (s) { try { s.getTracks().forEach(t => t.stop()); } catch (e) {} }
+        aliranKamera.current = null;
+      };
+
+      const nyalakanKamera = async (sisi) => {
+        tutupAliran();
+        setKamera(k => ({ ...k, kamera: sisi, siap: false, pesan: 'Menyiapkan kamera...' }));
+        try {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            throw new Error('Perangkat/browser tidak mendukung kamera in-app.');
           }
-        } else { 
-          showNotification('error', 'File Ditolak', 'Hanya format Gambar.'); 
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: sisi }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+            audio: false,
+          });
+          aliranKamera.current = stream;
+          const v = elemenVideo.current;
+          if (v) {
+            v.srcObject = stream;
+            await v.play().catch(() => {});
+          }
+          setKamera(k => ({ ...k, siap: true, pesan: '' }));
+        } catch (err) {
+          const m = String((err && err.message) || err);
+          setKamera(k => ({ ...k, siap: false, pesan: 'Kamera tidak bisa dibuka: ' + m }));
+        }
+      };
+
+
+      // Efek untuk menyalakan/mematikan kamera mengikuti state.
+      React.useEffect(() => {
+        if (kamera.buka) nyalakanKamera(kamera.kamera);
+        return () => tutupAliran();
+      }, [kamera.buka]);
+
+      const handlePhoto = async (e, field) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+          showNotification('error', 'File Ditolak', 'Hanya format Gambar.');
+          return;
+        }
+        try {
+          let img; let width, height;
+          if (window.createImageBitmap) {
+            img = await createImageBitmap(file, { imageOrientation: 'from-image' });
+            width = img.width; height = img.height;
+          } else {
+            const dataUrl = await new Promise((resolve) => { const reader = new FileReader(); reader.onload = (ev) => resolve(ev.target.result); reader.readAsDataURL(file); });
+            img = new Image(); await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; });
+            width = img.width; height = img.height;
+          }
+          await gambarKeKanvas(img, width, height, field);
+        } catch (err) {
+          console.error(err);
+          showNotification('error', 'Gagal Memproses Gambar', 'Format gambar tidak didukung atau memori penuh.');
+        } finally {
+          try { e.target.value = ''; } catch (err) {}
         }
       };
 
@@ -1653,6 +1767,7 @@
       );
 
       return (
+        <>
         <div className="min-h-screen bg-slate-50 text-slate-900 pb-24 md:pb-32 font-sans max-w-md mx-auto shadow-2xl ring-1 ring-gray-200 flex flex-col relative overflow-hidden">
           {previewPhoto && (
             <div className="fixed inset-0 z-[9999999] flex items-center justify-center p-4 bg-slate-950/95 backdrop-blur-md animate-in fade-in duration-200" onClick={tutupFoto}>
@@ -2035,6 +2150,7 @@
                             {items.map((v, idx) => {
                               const waNumber = formatWhatsAppNumber(v.hp1);
                               return (
+        <>
                               <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-100 flex flex-col justify-between shadow-sm hover:border-blue-300 transition-all">
                                 <div>
                                   <div className="flex justify-between items-start">
@@ -2113,7 +2229,8 @@
                                   </button>
                                 </div>
                               </div>
-                            );})}
+        </>
+                              );})}
                           </div>
                         )}
                       </div>
@@ -2182,10 +2299,10 @@
                     {visitFormData["FOTO RUMAH"] ? (
                       <div className="relative w-full rounded-2xl overflow-hidden border-2 border-blue-100 shadow-sm bg-slate-900 flex items-center justify-center">
                         <img src={visitFormData["FOTO RUMAH"]} alt="Preview Rumah" className="w-full object-contain aspect-[3/4]" />
-                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti<input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} /></label>
+                        <button type="button" onClick={() => bukaKamera("FOTO RUMAH")} className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti</button>
                       </div>
                     ) : (
-                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Rumah</span><input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO RUMAH")} /></label>
+                      <button type="button" onClick={() => bukaKamera("FOTO RUMAH")} className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Rumah</span></button>
                     )}
                   </div>
                   <div className="flex flex-col h-full mt-2">
@@ -2193,10 +2310,10 @@
                     {visitFormData["FOTO TINDAKAN"] ? (
                       <div className="relative w-full rounded-2xl overflow-hidden border-2 border-blue-100 shadow-sm bg-slate-900 flex items-center justify-center">
                         <img src={visitFormData["FOTO TINDAKAN"]} alt="Preview Tindakan" className="w-full object-contain aspect-[3/4]" />
-                        <label className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti<input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} /></label>
+                        <button type="button" onClick={() => bukaKamera("FOTO TINDAKAN")} className="absolute bottom-4 right-4 bg-blue-600 text-white px-4 py-3 rounded-xl text-sm font-black cursor-pointer hover:bg-blue-700 flex items-center gap-2 shadow-lg active:scale-95 transition-all"><Camera className="w-5 h-5"/> Ganti</button>
                       </div>
                     ) : (
-                      <label className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Tindakan</span><input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handlePhoto(e, "FOTO TINDAKAN")} /></label>
+                      <button type="button" onClick={() => bukaKamera("FOTO TINDAKAN")} className="w-full bg-slate-50 border-2 border-dashed border-slate-300 rounded-[2rem] px-4 py-16 flex flex-col justify-center items-center gap-3 cursor-pointer hover:bg-blue-50/50 hover:border-blue-400 transition-colors aspect-[3/4]"><Camera className="w-12 h-12 text-slate-400 transition-colors" /><span className="text-sm font-bold text-slate-500 transition-colors">Ambil Foto Tindakan</span></button>
                     )}
                   </div>
                 </div>
@@ -2242,6 +2359,8 @@
             <button onClick={() => setActiveTab('users')} className={`flex flex-col items-center gap-1 transition-all hover:scale-110 cursor-pointer ${activeTab === 'users' ? 'text-blue-600 scale-110 drop-shadow-sm font-bold' : 'text-slate-400 font-medium'}`}><UserCircle className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Profil</span></button>
           </nav>
         </div>
+        <LapisanKamera />
+        </>
       );
     }
 
