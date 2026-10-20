@@ -768,7 +768,7 @@
         return (
           <div className="fixed inset-0 z-[99999999] bg-black flex flex-col">
             <div className="relative flex-1 overflow-hidden bg-black">
-              <video ref={elemenVideo} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" />
+              <video ref={elemenVideo} autoPlay playsInline muted className="absolute inset-0 w-full h-full object-cover" style={{ backgroundColor: '#000', transform: kamera.kamera === 'user' ? 'scaleX(-1)' : 'none' }} />
               {kamera.pesan && (
                 <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-white text-sm bg-black/70">
                   <div className="space-y-3">
@@ -779,6 +779,9 @@
               )}
               <button type="button" onClick={tutupKamera} className="absolute top-4 right-4 bg-black/60 text-white px-4 py-2 rounded-full text-sm font-bold">Batal</button>
               <div className="absolute top-4 left-4 bg-black/60 text-white px-3 py-1 rounded-full text-[11px] font-bold">{kamera.field}</div>
+              {kamera.siap && (
+                <div className="absolute bottom-3 left-0 right-0 text-center text-[11px] text-white/90 font-bold pointer-events-none">Kamera siap — ketuk tombol putih untuk memotret</div>
+              )}
             </div>
             <div className="h-28 flex items-center justify-around bg-black pb-4" style={{ paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}>
               <button type="button" onClick={gantiKamera} disabled={!kamera.siap} className="text-white/80 text-xs font-bold px-4 py-3 disabled:opacity-30">Putar kamera</button>
