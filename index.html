@@ -1094,7 +1094,8 @@
                   tgk_angsuran: pilih('tgk_angsuran') ?? "0",
                   tgl_angsuran: pilih('tgl_angsuran', 'tanggal_angsuran', 'tanggal jatuh tempo') || "",
                   tgl_distribusi: ambilKolom(visit, 'tgl_distribusi', 'TGL_DISTRIBUSI') || ""
-             }));
+                };
+              }));
           } else { throw new Error(res?.message || 'Server error'); }
         } catch (error) { showNotification('error', 'Gagal Memuat Data', error.message); } finally { setIsFetchingVisit(false); }
       };
