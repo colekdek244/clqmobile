@@ -1,6 +1,6 @@
 // v13: pustaka dipindah ke /vendor (tidak lagi dari CDN). Naikkan versi ini
 // setiap deploy agar cache lama di HP terhapus dan versi baru terpakai.
-const CACHE_NAME = "clqmobile-v28";
+const CACHE_NAME = "clqmobile-v29";
 
 // Hanya berkas dari server sendiri. Dulu daftar ini berisi CDN pihak ketiga;
 // bila salah satunya diblokir, cache gagal terisi dan aplikasi tampil putih.
@@ -60,6 +60,9 @@ self.addEventListener("fetch", (event) => {
     // API baru (Cloudflare Workers + D1). WAJIB dikecualikan: kalau respons API
     // ikut ter-cache, petugas akan melihat data kunjungan/tugas yang lama.
     reqUrl.includes("workers.dev") ||
+    reqUrl.includes("clqportal.244.my.id") ||
+    reqUrl.includes("/api/") ||
+    reqUrl.includes("/api/foto/") ||
     reqUrl.includes("arcgis.com") ||
     reqUrl.includes("nominatim.openstreetmap.org") ||
     reqUrl.includes("bigdatacloud.net")

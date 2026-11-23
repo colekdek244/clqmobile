@@ -133,9 +133,18 @@
       });
     };
 
-    // API mobile mengirim kolom HURUF BESAR (SO_POKOK_TDY, KOL_TDY, ...),
-    // sedangkan kode lama membaca huruf kecil. Akibatnya saldo pokok tampil 0
-    // dan KOL tampil "-" walau datanya ada. Helper ini membaca keduanya.
+    const simpanPosisiOffline = (posisi) => {
+      try {
+        const lama = JSON.parse(localStorage.getItem('clq_posisi_offline') || '[]');
+        lama.push({ ...posisi, waktu: new Date().toISOString() });
+        localStorage.setItem('clq_posisi_offline', JSON.stringify(lama.slice(-200)));
+      } catch (e) {}
+    };
+    const ambilPosisiOffline = () => {
+      try { return JSON.parse(localStorage.getItem('clq_posisi_offline') || '[]'); } catch (e) { return []; }
+    };
+    const hapusPosisiOffline = () => { try { localStorage.removeItem('clq_posisi_offline'); } catch (e) {} };
+
     const ambilKolom = (r, ...nama) => {
       if (!r) return undefined;
       for (const n of nama) {
@@ -206,6 +215,39 @@
     const getLocalDateStr = () => {
       const d = new Date();
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+
+    const keFotoApi = (url) => {
+      if (!url || url.startsWith('data:') || /^https?:\/\/drive\.google\.com/i.test(url)) return url;
+      return url.split('?')[0];
+    };
+
+    const bukaFotoAman = async (src) => {
+      const tab = window.open('', '_blank');
+      try {
+        const r = await fetch(keFotoApi(src), { headers: { Authorization: 'Bearer ' + (localStorage.getItem('clq_token') || '') } });
+        if (!r.ok) throw new Error('Foto tidak dapat dimuat');
+        const blobUrl = URL.createObjectURL(await r.blob());
+        if (tab) tab.location = blobUrl; else window.location = blobUrl;
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      } catch (e) { if (tab) tab.close(); }
+    };
+
+    const FotoAman = ({ src, alt, className, loading }) => {
+      const [blobUrl, setBlobUrl] = React.useState('');
+      React.useEffect(() => {
+        let hidup = true; let objectUrl = '';
+        if (!src) return () => {};
+        if (src.startsWith('data:') || /^https?:\/\/drive\.google\.com/i.test(src)) {
+          setBlobUrl(src); return () => {};
+        }
+        fetch(keFotoApi(src), { headers: { Authorization: 'Bearer ' + (localStorage.getItem('clq_token') || '') } })
+          .then(r => { if (!r.ok) throw new Error('Foto tidak dapat dimuat'); return r.blob(); })
+          .then(blob => { if (hidup) { objectUrl = URL.createObjectURL(blob); setBlobUrl(objectUrl); } })
+          .catch(() => { if (hidup) setBlobUrl(''); });
+        return () => { hidup = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+      }, [src]);
+      return blobUrl ? <img src={blobUrl} alt={alt} loading={loading} className={className} /> : <span className={className} aria-label={alt} />;
     };
 
     const getDisplayImageUrl = (url) => {
@@ -419,10 +461,15 @@
             });
           }
 
-          // posisi tidak lagi lewat callApi (pakai kirimPosisi), tapi
-          // disediakan kalau ada bagian lama yang masih memanggil edit_user
           case 'edit_user':
-            return { status: 'success' };
+            return panggilApi('/api/mobile/profil', {
+              method: 'POST',
+              body: {
+                nama_user: payload.data?.NAMA_USER || payload.data?.nama_user || '',
+                jabatan: payload.data?.JABATAN || payload.data?.jabatan || '',
+                foto_url: payload.data?.FOTO_USER || payload.data?.foto_user || '',
+              },
+            });
 
           default:
             return { status: 'error', message: 'Aksi tidak dikenal: ' + action };
@@ -1003,7 +1050,8 @@
             img = new Image(); await new Promise((resolve) => { img.onload = resolve; img.src = dataUrl; });
             width = img.width; height = img.height;
           }
-          await gambarKeKanvas(img, width, height, field);
+          const hasil = await gambarKeKanvas(img, width, height, field);
+          if (hasil) setVisitFormData(prev => ({ ...prev, [field]: hasil }));
         } catch (err) {
           console.error(err);
           showNotification('error', 'Gagal Memproses Gambar', 'Format gambar tidak didukung atau memori penuh.');
@@ -1152,7 +1200,7 @@
                 if (!k) return '';
                 if (/^https?:|^data:/.test(k)) return k;
                 const dasar = API_DASAR + '/api/foto/' + k.split('/').map(encodeURIComponent).join('/');
-                return tokenFoto ? dasar + '?token=' + encodeURIComponent(tokenFoto) : dasar;
+                return dasar;
              };
 
              setReportData(rawReports.map(visit => ({
@@ -1216,24 +1264,27 @@
         // "Menyimpan..." berputar selamanya. Itu kondisi yang dilaporkan petugas.
         let kunciRumah = visitFormData["FOTO RUMAH"] || "";
         let kunciTindakan = visitFormData["FOTO TINDAKAN"] || "";
+        let fotoGagal = false;
         try {
-          if (kunciRumah && kunciRumah.startsWith('data:')) {
+          if (!isOffline && kunciRumah && kunciRumah.startsWith('data:')) {
             const k = await kirimFoto(kunciRumah, 'rumah');
             kunciRumah = k || "";
+            if (!k) fotoGagal = true;
           }
         } catch (eFoto) {
-          // Foto gagal diunggah: jangan gagalkan kunjungan, tapi beri tahu.
-          showNotification('warning', 'Foto Gagal Diunggah',
-            'Kunjungan tetap disimpan tanpa foto. ' + (eFoto && eFoto.message ? eFoto.message : ''));
+          showNotification('warning', 'Foto Gagal Diunggah', 'Kunjungan tetap disimpan tanpa foto.');
           kunciRumah = "";
+          fotoGagal = true;
         }
         try {
-          if (kunciTindakan && kunciTindakan.startsWith('data:')) {
+          if (!isOffline && kunciTindakan && kunciTindakan.startsWith('data:')) {
             const k = await kirimFoto(kunciTindakan, 'tindakan');
             kunciTindakan = k || "";
+            if (!k) fotoGagal = true;
           }
         } catch (eFoto2) {
           kunciTindakan = "";
+          fotoGagal = true;
         }
 
         const finalVisitData = {
@@ -1316,7 +1367,15 @@
         for (let i = 0; i < queue.length; i++) {
           const item = queue[i];
           try {
-            const res = await callApi(item.payload.action, { visit_id: item.payload.visit_id, data: item.payload.data });
+            const dataKirim = { ...item.payload.data };
+            for (const [k, jenis] of [['FOTO RUMAH', 'rumah'], ['FOTO TINDAKAN', 'tindakan']]) {
+              if (dataKirim[k] && dataKirim[k].startsWith('data:')) {
+                const kunci = await kirimFoto(dataKirim[k], jenis);
+                if (!kunci) throw new Error('Foto ' + jenis + ' belum berhasil diunggah');
+                dataKirim[k] = kunci;
+              }
+            }
+            const res = await callApi(item.payload.action, { visit_id: item.payload.visit_id, data: dataKirim });
 
             if (res && res.status === 'success') { 
               successCount++; 
@@ -1613,8 +1672,14 @@
         let dibatalkan = false;
 
         const kirimKalauPerlu = async (paksa = false) => {
-          if (dibatalkan || !posisiTerakhir || isOffline) return;
+          if (dibatalkan || !posisiTerakhir) return;
           const sekarang = Date.now();
+          if (isOffline) {
+            if (sekarang - terakhirKirim < KIRIM_TIAP_MS) return;
+            terakhirKirim = sekarang;
+            simpanPosisiOffline(posisiTerakhir);
+            return;
+          }
           if (!paksa && (sekarang - terakhirKirim) < KIRIM_TIAP_MS) return;
           terakhirKirim = sekarang;
 
@@ -1678,6 +1743,13 @@
 
         // kirim titik yang tersimpan saat offline (kalau ada)
         (async () => {
+          try {
+            const antrean = ambilPosisiOffline();
+            if (antrean.length && !isOffline) {
+              const hasil = await panggilApi('/api/mobile/posisi', { method: 'POST', body: { kiriman: antrean } });
+              if (hasil && hasil.status === 'success') hapusPosisiOffline();
+            }
+          } catch (e) {}
           try {
             const tersimpan = localStorage.getItem('clq_posisi_terakhir');
             if (tersimpan && !isOffline) {
@@ -1836,11 +1908,11 @@
                   <X className="w-6 h-6" />
                 </button>
                 <div className="bg-slate-950 p-2 rounded-3xl w-full flex justify-center items-center overflow-hidden border border-slate-800">
-                   <img src={getDisplayImageUrl(previewPhoto)} alt="Preview Kunjungan" className="w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl" />
-                </div>
-                <a href={getDisplayImageUrl(previewPhoto)} target="_blank" rel="noopener noreferrer" className="mt-4 text-blue-400 hover:text-blue-300 text-xs font-bold flex items-center gap-1.5 transition-colors bg-slate-900 px-5 py-2.5 rounded-full shadow-lg">
-                   Buka resolusi penuh <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                   <FotoAman src={previewPhoto} alt="Preview Kunjungan" className="w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl" />
+                 </div>
+                 <button type="button" onClick={() => bukaFotoAman(previewPhoto)} className="mt-4 text-blue-400 hover:text-blue-300 text-xs font-bold flex items-center gap-1.5 transition-colors bg-slate-900 px-5 py-2.5 rounded-full shadow-lg">
+                    Buka resolusi penuh <ExternalLink className="w-3.5 h-3.5" />
+                 </button>
               </div>
             </div>
           )}
@@ -1897,7 +1969,7 @@
                   </div>
                   <div>
                     <label className="text-[10px] uppercase tracking-wider font-bold text-slate-400 ml-1">Password Baru / Ubah Password <span className="font-normal text-slate-400 lowercase">(Kosongkan jika tak diubah)</span></label>
-                    <input type="text" value={userFormData.password} onChange={(e) => setUserFormData({...userFormData, password: e.target.value})} className="w-full mt-1.5 px-4 py-3.5 border rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-blue-50/50 border-blue-200" placeholder="Ketik sandi baru..." />
+                    <input type="password" value={userFormData.password} onChange={(e) => setUserFormData({...userFormData, password: e.target.value})} className="w-full mt-1.5 px-4 py-3.5 border rounded-2xl text-slate-700 font-bold text-sm focus:ring-2 focus:ring-blue-500 outline-none transition-all bg-blue-50/50 border-blue-200" placeholder="Ketik sandi baru..." />
                   </div>
                   <div className="pt-4 flex gap-3">
                     <button type="button" onClick={() => setShowUserForm(false)} className="flex-1 bg-gray-100 text-slate-600 font-bold py-4 rounded-2xl hover:bg-gray-200 transition-colors">Batal</button>
@@ -2112,13 +2184,13 @@
                                             {/* FOTO MINI: langsung terlihat, klik untuk ukuran penuh */}
                                             {fotoRumah && (
                                               <button onClick={() => bukaFoto(fotoRumah)} title="Foto Rumah — ketuk untuk perbesar" className="relative w-14 h-14 rounded-xl overflow-hidden border-2 border-blue-200 shadow-sm active:scale-95 transition-transform">
-                                                <img src={fotoRumah} alt="Foto Rumah" loading="lazy" className="w-full h-full object-cover" />
+                                                <FotoAman src={fotoRumah} alt="Foto Rumah" loading="lazy" className="w-full h-full object-cover" />
                                                 <span className="absolute bottom-0 inset-x-0 bg-blue-600/85 text-white text-[7px] font-black text-center py-0.5 tracking-wide">RUMAH</span>
                                               </button>
                                             )}
                                             {fotoTindakan && (
                                               <button onClick={() => bukaFoto(fotoTindakan)} title="Foto Tindakan — ketuk untuk perbesar" className="relative w-14 h-14 rounded-xl overflow-hidden border-2 border-purple-200 shadow-sm active:scale-95 transition-transform">
-                                                <img src={fotoTindakan} alt="Foto Tindakan" loading="lazy" className="w-full h-full object-cover" />
+                                                <FotoAman src={fotoTindakan} alt="Foto Tindakan" loading="lazy" className="w-full h-full object-cover" />
                                                 <span className="absolute bottom-0 inset-x-0 bg-purple-600/85 text-white text-[7px] font-black text-center py-0.5 tracking-wide">TINDAKAN</span>
                                               </button>
                                             )}
