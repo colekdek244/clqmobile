@@ -100,6 +100,16 @@
       } catch (err) { return []; }
     };
 
+    // Legacy queue items tanpa owner tidak boleh dikaitkan ke akun yang kebetulan
+    // login berikutnya. Item itu tetap tersimpan, tetapi perlu ditinjau manual.
+    const antreanUntukUser = (items, userId) => {
+      const id = String(userId || '').trim().toUpperCase();
+      return (items || []).filter(item =>
+        String(item.id_user || '').trim().toUpperCase() === id && !!id
+      );
+    };
+    const antreanLegacyPerluTinjau = items => (items || []).filter(item => !item.id_user);
+
     const addIDBItem = async (item) => {
       const db = await openIDB();
       return new Promise((resolve, reject) => {
@@ -345,6 +355,11 @@
       if (response.status === 401) {
         simpanToken('');
         bersihkanSesiLokal();
+        // Reset state React segera, bukan hanya localStorage/reload. Kalau tidak,
+        // UI tetap terlihat login sementara semua request berikutnya ditolak.
+        try {
+          if (typeof window.__clqResetAuth === 'function') window.__clqResetAuth();
+        } catch (e) {}
         throw new Error((data && data.message) || 'Sesi berakhir. Silakan login ulang.');
       }
 
@@ -571,7 +586,15 @@
           const saved = localStorage.getItem('clq_app_user');
           return saved ? JSON.parse(saved) : null;
         } catch(e) { return null; }
-      }); 
+      });
+      // panggilApi dideklarasikan di luar komponen; callback ini membuat respons
+      // 401 dapat menutup sesi React saat itu juga.
+      window.__clqResetAuth = () => {
+        setAppUser(null);
+        setUser({ uid: 'mode-sandbox' });
+        setPerluGantiPassword(false);
+        setLoginError('Sesi berakhir atau login di perangkat lain. Silakan masuk kembali.');
+      };
 
       const [user, setUser] = useState({ uid: appUser ? 'session-active' : 'mode-sandbox' });
       const [loading, setLoading] = useState(false); // Non-blocking loading screen
@@ -660,7 +683,37 @@
       const [isFetchingStats, setIsFetchingStats] = useState(false);
       const [isOffline, setIsOffline] = useState(!navigator.onLine);
       const [offlineQueue, setOfflineQueue] = useState([]);
+      const [offlineLegacyCount, setOfflineLegacyCount] = useState(0);
       const [isSyncing, setIsSyncing] = useState(false);
+
+      useEffect(() => {
+        let hidup = true;
+        (async () => {
+          const idAktif = appUser ? String(getUserId(appUser) || '').trim().toUpperCase() : '';
+          let semua = await getIDBQueue();
+          // Item lama (sebelum ada kolom id_user) hanya diadopsi bila data
+          // kunjungannya sendiri mencatat ID_USER yang sama. Kalau tidak cocok,
+          // item tetap dibiarkan untuk ditinjau — jangan menebak pemiliknya.
+          if (idAktif) {
+            let berubah = false;
+            for (const it of semua) {
+              if (it.id_user) continue;
+              const pemilikData = String((it.payload && it.payload.data && it.payload.data['ID_USER']) || '').trim().toUpperCase();
+              if (pemilikData && pemilikData === idAktif) {
+                it.id_user = idAktif;
+                await updateIDBItem(it);
+                berubah = true;
+              }
+            }
+            if (berubah) semua = await getIDBQueue();
+          }
+          if (hidup) {
+            setOfflineQueue(antreanUntukUser(semua, idAktif));
+            setOfflineLegacyCount(antreanLegacyPerluTinjau(semua).length);
+          }
+        })();
+        return () => { hidup = false; };
+      }, [appUser]);
 
       const [isFetchingReport, setIsFetchingReport] = useState(false);
       // Rentang laporan: default 7 hari ke belakang (termasuk hari ini).
@@ -1327,7 +1380,7 @@
 
         const saveToOfflineQueue = async () => {
           try {
-            const currentQueue = await getIDBQueue();
+            const currentQueue = antreanUntukUser(await getIDBQueue(), getUserId(appUser));
             const existing = currentQueue.find(item => item.acctNo === visitFormData.ACCTNO);
             if (existing && existing.id !== undefined) {
               await deleteIDBItem(existing.id);
@@ -1335,6 +1388,7 @@
 
             const idbItem = {
               acctNo: visitFormData.ACCTNO,
+              id_user: String(getUserId(appUser) || '').trim().toUpperCase(),
               payload: payload,
               createdAt: Date.now(),
               retryCount: 0
@@ -1378,11 +1432,18 @@
       };
 
       const syncOfflineQueue = async (paksa = false) => {
-        if (isSyncing || !navigator.onLine) return;
-        const queue = await getIDBQueue();
-        if (!queue || queue.length === 0) return;
+        if (isSyncing || !navigator.onLine || !appUser) return;
+        const idUserAktif = String(getUserId(appUser) || '').trim().toUpperCase();
+        const semuaQueue = await getIDBQueue();
+        const queue = antreanUntukUser(semuaQueue, idUserAktif);
+        const legacyCount = antreanLegacyPerluTinjau(semuaQueue).length;
+        if (!queue.length) {
+          if (legacyCount) showNotification('warning', 'Antrean Lama Perlu Ditinjau',
+            `${legacyCount} data offline dari versi lama tidak dikaitkan ke akun ini dan tetap tersimpan di perangkat. Login dengan akun petugas pemilik data atau hubungi admin.`);
+          return;
+        }
 
-        setIsSyncing(true); let successCount = 0; let gagalBaru = 0;
+        setIsSyncing(true); let successCount = 0; let gagalBaru = 0; let pesanGagal = '';
 
         for (let i = 0; i < queue.length; i++) {
           const item = queue[i];
@@ -1392,13 +1453,19 @@
           if (paksa) { item.gagal = false; item.pesanGagal = null; item.retryCount = 0; }
           try {
             const dataKirim = { ...item.payload.data };
+            let fotoBerubah = false;
             for (const [k, jenis] of [['FOTO RUMAH', 'rumah'], ['FOTO TINDAKAN', 'tindakan']]) {
               if (dataKirim[k] && dataKirim[k].startsWith('data:')) {
                 const kunci = await kirimFoto(dataKirim[k], jenis);
                 if (!kunci) throw new Error('Foto ' + jenis + ' belum berhasil diunggah');
+                // Persist key immediately: bila POST kunjungan gagal, retry memakai
+                // object R2 yang sama dan tidak mengunggah foto duplikat.
                 dataKirim[k] = kunci;
+                item.payload.data[k] = kunci;
+                fotoBerubah = true;
               }
             }
+            if (fotoBerubah) await updateIDBItem(item);
             const res = await callApi(item.payload.action, { visit_id: item.payload.visit_id, data: dataKirim });
 
             if (res && res.status === 'success') { 
@@ -1407,6 +1474,8 @@
             } else {
               const retries = (item.retryCount || 0) + 1;
               item.retryCount = retries;
+              pesanGagal = (res && (res.message || res.error)) || 'Ditolak server';
+              item.pesanGagal = pesanGagal;
               if (retries >= 3) {
                 // JANGAN DIHAPUS. Kalau kegagalannya karena validasi server
                 // (bukan sinyal), menghapus item berarti kunjungan dan fotonya
@@ -1419,13 +1488,30 @@
               }
               await updateIDBItem(item);
             }
-          } catch (err) { 
-            break; 
+          } catch (err) {
+            const pesan = String((err && err.message) || err || 'Sinkronisasi gagal');
+            pesanGagal = pesan;
+            // 401 membuat panggilApi mereset sesi. Jangan menambah retry atau
+            // menandai data ditolak; antrean tetap milik user yang login awal.
+            if (/sesi berakhir|token tidak sah|login kembali/i.test(pesan)) break;
+            const retries = (item.retryCount || 0) + 1;
+            item.retryCount = retries;
+            item.pesanGagal = pesan;
+            if (retries >= 3) {
+              item.gagal = true;
+              item.gagalPada = Date.now();
+              gagalBaru++;
+            }
+            await updateIDBItem(item);
+            break;
           }
         }
 
-        const remainingQueue = await getIDBQueue();
-        setOfflineQueue(remainingQueue); setIsSyncing(false);
+        const semuaSisa = await getIDBQueue();
+        const remainingQueue = antreanUntukUser(semuaSisa, idUserAktif);
+        setOfflineQueue(remainingQueue);
+        setOfflineLegacyCount(antreanLegacyPerluTinjau(semuaSisa).length);
+        setIsSyncing(false);
 
         const jmlGagal = remainingQueue.filter(x => x.gagal).length;
 
@@ -1436,6 +1522,8 @@
         if (gagalBaru > 0 || (jmlGagal > 0 && successCount === 0)) {
           showNotification('warning', 'Sebagian Data Ditolak Server',
             `${jmlGagal} kunjungan gagal terkirim dan TETAP disimpan di HP ini. Jangan hapus data aplikasi — laporkan ke admin.`);
+        } else if (pesanGagal && successCount === 0) {
+          showNotification('error', 'Sinkronisasi Tertunda', pesanGagal);
         }
       };
 
@@ -1515,14 +1603,16 @@
         try { await panggilApi('/api/mobile/logout', { method: 'POST', body: {} }); } catch (e) {}
         simpanToken('');
         bersihkanSesiLokal();
+        // Antrean kunjungan TIDAK dihapus: itu data lapangan yang belum terkirim.
+        // Item tetap tersimpan dan hanya bisa dikirim lagi oleh akun pemiliknya.
         setAppUser(null); 
         setLoginId(''); 
         setLoginPassword(''); 
         window.location.reload(); 
       };
 
-      const handleLogout = async () => { 
-        const currentQueue = await getIDBQueue();
+      const handleLogout = async () => {
+        const currentQueue = antreanUntukUser(await getIDBQueue(), getUserId(appUser));
         if (currentQueue.length > 0) {
           if (isOffline) {
             showNotification('confirm', 'Mode Offline Aktif', `Ada ${currentQueue.length} kunjungan belum terkirim di IndexedDB. Yakin keluar?`, executeLogout);
@@ -1603,12 +1693,6 @@
       }, []);
 
       useEffect(() => {
-        const initOfflineQueue = async () => {
-          const currentQueue = await getIDBQueue();
-          setOfflineQueue(currentQueue);
-        };
-        initOfflineQueue();
-
         const handleOnline = () => setIsOffline(false); const handleOffline = () => setIsOffline(true);
         window.addEventListener('online', handleOnline); window.addEventListener('offline', handleOffline);
         return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
@@ -2084,16 +2168,17 @@
             </div>
           </header>
 
-          {(isOffline || offlineQueue.length > 0) && (
-            <div className={`w-full px-4 py-3 text-[10px] font-bold flex justify-between items-center z-20 shadow-md animate-in slide-in-from-top-2 sticky top-[72px] transition-colors ${offlineQueue.some(x => x.gagal) ? 'bg-red-600 text-white' : isOffline ? 'bg-amber-500 text-amber-50' : 'bg-blue-600 text-white'}`}>
+          {(isOffline || offlineQueue.length > 0 || (appUser && offlineLegacyCount > 0)) && (
+            <div className={`w-full px-4 py-3 text-[10px] font-bold flex justify-between items-center z-20 shadow-md animate-in slide-in-from-top-2 sticky top-[72px] transition-colors ${offlineLegacyCount > 0 && !offlineQueue.length ? 'bg-amber-700 text-white' : offlineQueue.some(x => x.gagal) ? 'bg-red-600 text-white' : isOffline ? 'bg-amber-500 text-amber-50' : 'bg-blue-600 text-white'}`}>
               <div className="flex items-center gap-2">
                 {isOffline ? <AlertCircle className="w-4 h-4" /> : <Database className="w-4 h-4" />}
                 <span className="leading-tight">
-                   {offlineQueue.some(x => x.gagal) ? 'ADA DATA DITOLAK SERVER' : isOffline ? 'MODE OFFLINE AKTIF' : 'KONEKSI KEMBALI NORMAL'} 
+                   {offlineLegacyCount > 0 && !offlineQueue.length ? 'ANTREAN LAMA PERLU DITINJAU' : offlineQueue.some(x => x.gagal) ? 'ADA DATA DITOLAK SERVER' : isOffline ? 'MODE OFFLINE AKTIF' : 'KONEKSI KEMBALI NORMAL'}
                    <br />
                    <span className="font-medium opacity-90">
-                     {offlineQueue.length} kunjungan menunggu dikirim
-                     {offlineQueue.some(x => x.gagal) ? ` · ${offlineQueue.filter(x => x.gagal).length} gagal, tetap disimpan` : ''}
+                     {offlineLegacyCount > 0 && !offlineQueue.length
+                       ? `${offlineLegacyCount} data dari versi lama tetap tersimpan, tetapi belum aman dikaitkan ke akun. Hubungi admin.`
+                       : `${offlineQueue.length} kunjungan menunggu dikirim${offlineQueue.some(x => x.gagal) ? ` · ${offlineQueue.filter(x => x.gagal).length} gagal, tetap disimpan` : ''}`}
                    </span>
                 </span>
               </div>
