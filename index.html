@@ -17,7 +17,12 @@
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;700;900&display=swap');
     html, body { overscroll-behavior-y: none; overscroll-behavior-x: none; }
-    body { background-color: #f3f4f6; font-family: 'Cairo', sans-serif; margin: 0; padding: 0; } 
+    body { background: #f7f9fc; font-family: 'Cairo', sans-serif; margin: 0; padding: 0; color: #172554; }
+    .clq-shell { background: linear-gradient(180deg, #eef5ff 0, #f7f9fc 260px); }
+    .clq-stat-card { position: relative; overflow: hidden; min-height: 112px; }
+    .clq-stat-card::after { content: ''; position: absolute; width: 76px; height: 76px; right: -24px; bottom: -28px; border-radius: 999px; background: rgba(37,99,235,.06); }
+    .clq-section-title { letter-spacing: -.02em; }
+    @media (min-width: 640px) { .clq-content { max-width: 560px; margin: 0 auto; } }
   </style>
 
   <!--
@@ -2172,7 +2177,7 @@
             </div>
           )}
 
-          <header className="bg-gradient-to-r from-blue-700 to-blue-800 text-white p-4 sticky top-0 z-30 shadow-md border-b border-blue-600/20">
+          <header className="bg-gradient-to-br from-blue-800 via-blue-700 to-indigo-700 text-white px-4 pt-3 pb-4 sticky top-0 z-30 shadow-lg border-b border-blue-500/30">
             <div className="flex justify-between items-center">
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center gap-3">
@@ -2235,13 +2240,13 @@
             </div>
           )}
 
-          <main className="p-4 flex-1 pb-28">
+          <main className="clq-shell clq-content p-4 flex-1 pb-28">
             {activeTab === 'dashboard' && (
-              <div className="space-y-6 animate-in fade-in duration-500">
+              <div className="space-y-5 animate-in fade-in duration-500">
                 <div className="flex flex-col gap-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center">
-                      <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">Target Kunjungan</p>
+                    <div className="clq-stat-card bg-white p-4 rounded-3xl shadow-sm border border-blue-100 flex flex-col justify-center">
+                      <div className="flex items-center justify-between mb-2"><p className="text-slate-500 text-[10px] font-black uppercase tracking-wider">Target Kunjungan</p><Users className="w-4 h-4 text-blue-500" /></div>
                       {isFetchingStats && dashboardStats.target === 0 ? <Loader2 className="w-5 h-5 animate-spin text-blue-500 mt-1" /> : (
                         <div className="flex flex-col gap-1">
                           <p className="text-2xl font-black text-slate-800 leading-none">{dashboardStats.target}</p>
@@ -2249,8 +2254,8 @@
                         </div>
                       )}
                     </div>
-                    <div className="bg-white p-4 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-center">
-                      <p className="text-slate-400 text-[10px] font-bold uppercase tracking-wider mb-1">Sudah Dikunjungi</p>
+                    <div className="clq-stat-card bg-white p-4 rounded-3xl shadow-sm border border-emerald-100 flex flex-col justify-center">
+                      <div className="flex items-center justify-between mb-2"><p className="text-slate-500 text-[10px] font-black uppercase tracking-wider">Sudah Dikunjungi</p><CheckCircle className="w-4 h-4 text-emerald-500" /></div>
                       {isFetchingStats && dashboardStats.dikunjungi === 0 ? <Loader2 className="w-5 h-5 animate-spin text-green-500 mt-1" /> : (
                         <div className="flex flex-col gap-1">
                           <p className="text-2xl font-black text-emerald-600 leading-none">{dashboardStats.dikunjungi}</p>
@@ -2259,8 +2264,8 @@
                       )}
                     </div>
                   </div>
-                  <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-5 rounded-[2rem] shadow-xl shadow-blue-100 flex items-center gap-4 text-white">
-                    <div className="bg-white/10 p-3.5 rounded-2xl backdrop-blur-md border border-white/10"><Users className="w-6 h-6" /></div>
+                  <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 p-5 rounded-[2rem] shadow-xl shadow-blue-200/60 flex items-center gap-4 text-white border border-blue-400/30">
+                    <div className="bg-white/15 p-3.5 rounded-2xl backdrop-blur-md border border-white/20"><Users className="w-6 h-6" /></div>
                     <div className="flex-1 flex flex-col justify-center h-full">
                       <p className="text-xs text-blue-100 font-medium">Debitur Belum di Visit</p>
                       {isFetchingStats && dashboardStats.belum === 0 ? <Loader2 className="w-6 h-6 animate-spin text-white mt-1" /> : (
@@ -2275,12 +2280,12 @@
 
                 <section className="pt-2 pb-4">
                   <div className="mb-3 flex justify-between items-center">
-                    <h2 className="font-bold text-slate-800 flex items-center gap-2"><FileText className="w-5 h-5 text-blue-500" /> Riwayat Visit</h2>
+                    <h2 className="clq-section-title font-black text-slate-800 flex items-center gap-2"><span className="p-2 rounded-xl bg-blue-100"><FileText className="w-4 h-4 text-blue-600" /></span> Riwayat Visit</h2>
                     {isFetchingReport && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
                   </div>
 
                   {/* PILIH RENTANG TANGGAL LAPORAN */}
-                  <div className="mb-3 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                  <div className="mb-3 bg-white p-4 rounded-3xl border border-blue-100 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] font-black text-slate-500 tracking-wide">RENTANG TANGGAL</span>
                       <span className="text-[10px] font-bold text-slate-400">{reportData.length} kunjungan</span>
