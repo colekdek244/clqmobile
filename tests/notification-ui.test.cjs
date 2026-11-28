@@ -4,7 +4,9 @@ const assert = require('node:assert/strict');
 const source = fs.readFileSync('index.html', 'utf8');
 
 test('header notification button opens completed-visit list from report data', () => {
-  assert.match(source, /title="Notifikasi Kunjungan Selesai"[\s\S]*<Bell className=/);
+  assert.match(source, /title="Notifikasi Kunjungan Selesai"[\s\S]*aria-label="Buka notifikasi kunjungan selesai"/);
+  assert.match(source, /aria-label="Buka notifikasi kunjungan selesai"[\s\S]*?<svg aria-hidden="true" viewBox="0 0 24 24"/);
+  assert.doesNotMatch(source, /\bBell\b/);
   assert.match(source, /title="Refresh" onClick=\{handleGlobalRefresh\}/);
   assert.match(source, /const visitProgressPercent = hitungPersenKunjungan\(targetCount, visitedCount\)/);
   assert.match(source, /Nasabah<\/span>/);

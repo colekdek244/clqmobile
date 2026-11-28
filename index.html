@@ -68,7 +68,7 @@
       MapPin, Phone, MessageSquare, CheckCircle, AlertCircle, 
       LayoutDashboard, Users, Loader2, RefreshCw, Database, Info, 
       Lock, UserCircle, LogOut, ChevronDown, Camera, X, Save, Edit,
-      FileText, ImageIcon, ExternalLink, Bell
+      FileText, ImageIcon, ExternalLink
     } from 'lucide-react';
     const hitungPersenKunjungan = (target, dikunjungi) => {
       const total = Number(target) || 0;
@@ -2092,7 +2092,7 @@
               <section className="w-full max-w-md max-h-[88vh] bg-slate-50 rounded-[2rem] shadow-2xl overflow-hidden flex flex-col">
                 <div className="bg-blue-950 text-white px-5 py-4 flex items-center justify-between shrink-0">
                   <div>
-                    <h2 className="text-lg font-black flex items-center gap-2"><Bell className="w-5 h-5" /> Notifikasi Kunjungan</h2>
+                    <h2 className="text-lg font-black flex items-center gap-2"><svg aria-hidden="true" viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg> Notifikasi Kunjungan</h2>
                     <p className="text-[11px] text-blue-200 mt-1">{reportData.length} kunjungan selesai · {reportFilterDateStart} s/d {reportFilterDateEnd}</p>
                   </div>
                   <button type="button" onClick={() => setShowVisitNotifications(false)} aria-label="Tutup notifikasi" className="p-2 rounded-full bg-white/10 hover:bg-white/20"><X className="w-5 h-5" /></button>
@@ -2238,7 +2238,7 @@
                     aria-label="Buka notifikasi kunjungan selesai"
                     onClick={() => { setShowVisitNotifications(true); handleFetchReport(reportFilterDateStart, reportFilterDateEnd); }}
                   >
-                    <Bell className="w-4 h-4 text-white" />
+                    <svg aria-hidden="true" viewBox="0 0 24 24" className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
                   </button>
                   <button className="w-10 h-10 p-2.5 bg-blue-600/80 hover:bg-blue-500/80 rounded-xl transition-all border border-blue-400/30 flex items-center justify-center" title="Refresh" onClick={handleGlobalRefresh}>
                     <RefreshCw className={`w-4 h-4 text-white ${isFetchingStats || isFetchingVisit ? 'animate-spin' : ''}`} />
