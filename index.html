@@ -102,11 +102,15 @@
 
     // Legacy queue items tanpa owner tidak boleh dikaitkan ke akun yang kebetulan
     // login berikutnya. Item itu tetap tersimpan, tetapi perlu ditinjau manual.
-    const antreanUntukUser = (items, userId) => {
+    const antreanUntukUser = (items, userId, region) => {
       const id = String(userId || '').trim().toUpperCase();
-      return (items || []).filter(item =>
-        String(item.id_user || '').trim().toUpperCase() === id && !!id
-      );
+      const r = String(region || 'mamuju').trim().toLowerCase();
+      return (items || []).filter(item => {
+        if (!id || String(item.id_user || '').trim().toUpperCase() !== id) return false;
+        // Item baru selalu membawa wilayah. Item lama tanpa wilayah hanya aman
+        // untuk Mamuju, backend default sebelum gateway ada.
+        return String(item.region || 'mamuju').trim().toLowerCase() === r;
+      });
     };
     const antreanLegacyPerluTinjau = items => (items || []).filter(item => !item.id_user);
 
@@ -288,15 +292,40 @@
     // Saat diuji lokal, backend lokal dipakai kalau memang ada di port 8803.
     // Selain itu (termasuk halaman disajikan dari localhost tanpa backend lokal)
     // tetap mengarah ke server produksi.
-    const API_DASAR = (window.CLQ_API_UJI === true)
+    // Gateway login lintas wilayah. Password hanya dikirim ke gateway; gateway
+    // memilih satu backend berdasarkan direktori ID, bukan mencoba semua API.
+    const API_GATEWAY = (window.CLQ_API_UJI === true)
       ? "http://127.0.0.1:8803"
-      : "https://clqportal.244.my.id";   // workers.dev diblokir di sebagian jaringan operator HP
+      : "https://clqlogin.244.my.id";
+
+    // Instalasi lama belum punya penanda wilayah. Default Mamuju menjaga sesi
+    // yang sudah ada tetap bekerja; setelah login lewat gateway, nilai ini
+    // diganti dengan api_base wilayah yang mengeluarkan token.
+    const API_DASAR_DEFAULT = (window.CLQ_API_UJI === true)
+      ? "http://127.0.0.1:8803"
+      : "https://clqportal.244.my.id";
+    const API_BASE_KEY = 'clq_api_base';
+    const REGION_KEY = 'clq_region';
+    const apiDasar = () => {
+      try { return localStorage.getItem(API_BASE_KEY) || API_DASAR_DEFAULT; } catch (e) { return API_DASAR_DEFAULT; }
+    };
+    const wilayahAktif = () => {
+      try { return localStorage.getItem(REGION_KEY) || ''; } catch (e) { return ''; }
+    };
 
     const ambilToken = () => {
       try { return localStorage.getItem('clq_token') || ''; } catch (e) { return ''; }
     };
     const simpanToken = (t) => {
       try { t ? localStorage.setItem('clq_token', t) : localStorage.removeItem('clq_token'); } catch (e) {}
+    };
+    const simpanRuteLogin = (apiBase, region) => {
+      try {
+        if (apiBase) localStorage.setItem(API_BASE_KEY, String(apiBase).replace(/\/$/, ''));
+        else localStorage.removeItem(API_BASE_KEY);
+        if (region) localStorage.setItem(REGION_KEY, String(region));
+        else localStorage.removeItem(REGION_KEY);
+      } catch (e) {}
     };
 
     /**
@@ -311,6 +340,10 @@
       try {
         ['clq_app_user', 'clq_params_cache', 'clq_cluster_name',
          'clq_posisi_terakhir', 'clq_posisi_offline'].forEach(k => localStorage.removeItem(k));
+        // Token tidak boleh dipakai ulang setelah 401. api_base/region ikut
+        // dibersihkan supaya login berikutnya tidak memakai backend lama.
+        simpanToken('');
+        simpanRuteLogin('', '');
         Object.keys(localStorage)
           .filter(k => k.startsWith('clq_dash_bundle_'))
           .forEach(k => localStorage.removeItem(k));
@@ -322,6 +355,7 @@
       const token = ambilToken();
       const headers = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = 'Bearer ' + token;
+      const tujuan = opsi.base || apiDasar();
 
       // BATAS WAKTU WAJIB (19 Okt): tanpa ini, satu permintaan yang menggantung
       // membuat tombol "Menyimpan..." berputar SELAMANYA dan data petugas tidak
@@ -332,7 +366,7 @@
       const batas = setTimeout(() => pengawas.abort(), opsi.batasMs || 150000);
       let response;
       try {
-        response = await fetch(API_DASAR + jalur, {
+        response = await fetch(tujuan + jalur, {
           method: opsi.method || 'GET',
           headers,
           body: opsi.body ? JSON.stringify(opsi.body) : undefined,
@@ -351,8 +385,9 @@
       let data = null;
       try { data = await response.json(); } catch (e) { data = null; }
 
-      // token ditolak -> bersihkan supaya petugas diminta login ulang
-      if (response.status === 401) {
+      // token ditolak -> bersihkan supaya petugas diminta login ulang.
+      // Login sendiri memakai abaikan401: password salah bukan sesi kedaluwarsa.
+      if (response.status === 401 && !opsi.abaikan401) {
         simpanToken('');
         bersihkanSesiLokal();
         // Reset state React segera, bukan hanya localStorage/reload. Kalau tidak,
@@ -398,8 +433,12 @@
       try {
         switch (action) {
           case 'login': {
+            // Login WAJIB lewat gateway: hanya gateway yang boleh menentukan
+            // wilayah. Password tidak dikirim ke API wilayah secara langsung.
             const r = await panggilApi('/api/mobile/login', {
               method: 'POST',
+              base: API_GATEWAY,
+              abaikan401: true,
               body: {
                 id_user: payload.id_user,
                 password: payload.password,
@@ -407,6 +446,10 @@
               },
             });
             if (r.status === 'success' && r.token) {
+              if (!r.api_base || !r.region) {
+                throw new Error('Gateway tidak mengembalikan rute wilayah. Login dibatalkan.');
+              }
+              simpanRuteLogin(r.api_base, r.region);
               simpanToken(r.token);
               // Teruskan penanda wajib ganti password; tanpa ini aplikasi
               // langsung masuk padahal server menandai token sebagai terbatas.
@@ -443,7 +486,7 @@
               status: 'success',
               dashboardStats: ringkas.ringkasan,
               parameters: params.parameters,
-              clusterName: 'CLQ MAMUJU',
+              clusterName: 'CLQ ' + String(wilayahAktif() || 'mamuju').toUpperCase(),
             };
           }
 
@@ -538,7 +581,7 @@
         if (!window.CLQAndroid || !window.CLQAndroid.setKredensial) return;
         const t = ambilToken();
         if (!t) return;
-        const dasar = window.CLQ_API_UJI === true ? 'http://127.0.0.1:8803/api/mobile' : 'https://clqportal.244.my.id/api/mobile';
+        const dasar = apiDasar() + '/api/mobile';
         window.CLQAndroid.setKredensial(dasar + '/posisi', t);
       } catch (e) {}
     };
@@ -708,7 +751,7 @@
             if (berubah) semua = await getIDBQueue();
           }
           if (hidup) {
-            setOfflineQueue(antreanUntukUser(semua, idAktif));
+            setOfflineQueue(antreanUntukUser(semua, idAktif, wilayahAktif()));
             setOfflineLegacyCount(antreanLegacyPerluTinjau(semua).length);
           }
         })();
@@ -1272,7 +1315,7 @@
              const keUrlFoto = (k) => {
                 if (!k) return '';
                 if (/^https?:|^data:/.test(k)) return k;
-                const dasar = API_DASAR + '/api/foto/' + k.split('/').map(encodeURIComponent).join('/');
+                const dasar = apiDasar() + '/api/foto/' + k.split('/').map(encodeURIComponent).join('/');
                 return dasar;
              };
 
@@ -1380,7 +1423,7 @@
 
         const saveToOfflineQueue = async () => {
           try {
-            const currentQueue = antreanUntukUser(await getIDBQueue(), getUserId(appUser));
+            const currentQueue = antreanUntukUser(await getIDBQueue(), getUserId(appUser), wilayahAktif());
             const existing = currentQueue.find(item => item.acctNo === visitFormData.ACCTNO);
             if (existing && existing.id !== undefined) {
               await deleteIDBItem(existing.id);
@@ -1389,6 +1432,7 @@
             const idbItem = {
               acctNo: visitFormData.ACCTNO,
               id_user: String(getUserId(appUser) || '').trim().toUpperCase(),
+              region: wilayahAktif(),
               payload: payload,
               createdAt: Date.now(),
               retryCount: 0
@@ -1435,7 +1479,7 @@
         if (isSyncing || !navigator.onLine || !appUser) return;
         const idUserAktif = String(getUserId(appUser) || '').trim().toUpperCase();
         const semuaQueue = await getIDBQueue();
-        const queue = antreanUntukUser(semuaQueue, idUserAktif);
+        const queue = antreanUntukUser(semuaQueue, idUserAktif, wilayahAktif());
         const legacyCount = antreanLegacyPerluTinjau(semuaQueue).length;
         if (!queue.length) {
           if (legacyCount) showNotification('warning', 'Antrean Lama Perlu Ditinjau',
@@ -1508,7 +1552,7 @@
         }
 
         const semuaSisa = await getIDBQueue();
-        const remainingQueue = antreanUntukUser(semuaSisa, idUserAktif);
+        const remainingQueue = antreanUntukUser(semuaSisa, idUserAktif, wilayahAktif());
         setOfflineQueue(remainingQueue);
         setOfflineLegacyCount(antreanLegacyPerluTinjau(semuaSisa).length);
         setIsSyncing(false);
@@ -1612,7 +1656,7 @@
       };
 
       const handleLogout = async () => {
-        const currentQueue = antreanUntukUser(await getIDBQueue(), getUserId(appUser));
+        const currentQueue = antreanUntukUser(await getIDBQueue(), getUserId(appUser), wilayahAktif());
         if (currentQueue.length > 0) {
           if (isOffline) {
             showNotification('confirm', 'Mode Offline Aktif', `Ada ${currentQueue.length} kunjungan belum terkirim di IndexedDB. Yakin keluar?`, executeLogout);
