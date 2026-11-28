@@ -2221,19 +2221,18 @@
                 </div>
               </div>
               <div className="flex flex-col items-end gap-2 self-start">
-                <div className="flex gap-1.5">
+                <div className="flex justify-end gap-2">
                   <button
-                    className="p-2 bg-blue-600/80 hover:bg-blue-500/80 rounded-xl transition-all border border-blue-400/30"
+                    className="w-10 h-10 p-2.5 bg-blue-600/80 hover:bg-blue-500/80 rounded-xl transition-all border border-blue-400/30 flex items-center justify-center"
                     title="Notifikasi Kunjungan Selesai"
                     aria-label="Buka notifikasi kunjungan selesai"
                     onClick={() => { setShowVisitNotifications(true); handleFetchReport(reportFilterDateStart, reportFilterDateEnd); }}
                   >
                     <Bell className="w-4 h-4 text-white" />
                   </button>
-                  <button className="p-2 bg-blue-600/80 hover:bg-blue-500/80 rounded-xl transition-all border border-blue-400/30" title="Refresh" onClick={handleGlobalRefresh}>
+                  <button className="w-10 h-10 p-2.5 bg-blue-600/80 hover:bg-blue-500/80 rounded-xl transition-all border border-blue-400/30 flex items-center justify-center" title="Refresh" onClick={handleGlobalRefresh}>
                     <RefreshCw className={`w-4 h-4 text-white ${isFetchingStats || isFetchingVisit ? 'animate-spin' : ''}`} />
                   </button>
-
                 </div>
                 <div className="flex items-center gap-1.5 text-xs font-bold text-white bg-blue-900/40 px-2.5 py-1 rounded-full border border-blue-600/30">
                   {(appUser?.foto_user || appUser?.['foto user'] || appUser?.foto || appUser?.photo) ? (
