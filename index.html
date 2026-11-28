@@ -435,7 +435,7 @@
           case 'login': {
             // Login WAJIB lewat gateway: hanya gateway yang boleh menentukan
             // wilayah. Password tidak dikirim ke API wilayah secara langsung.
-            const r = await panggilApi('/api/mobile/login', {
+            const r = await panggilApi('/api/mobile/login?cors_v=2', {
               method: 'POST',
               base: API_GATEWAY,
               abaikan401: true,
