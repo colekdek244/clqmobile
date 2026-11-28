@@ -9,7 +9,12 @@ test('header notification button opens completed-visit list from report data', (
   assert.match(source, /showVisitNotifications &&/);
   assert.match(source, /Notifikasi Kunjungan/);
   assert.match(source, /reportData\.map\(\(row, idx\)/);
-  assert.match(source, /Belum ada kunjungan selesai/);
+  assert.match(source, /<nav className="fixed bottom-0/);
+  assert.match(source, /background: 'linear-gradient\(115deg,#102f5e,#071d3f\)'/);
+  assert.match(source, /flex flex-1 flex-col items-center/g);
+  assert.match(source, /<span className="text-\[10px\] uppercase tracking-tighter">Keluar<\/span>/);
+  assert.match(source, /<button onClick=\{handleLogout\}[\s\S]*<LogOut className="w-5 h-5" \/>[\s\S]*Keluar/);
+  assert.doesNotMatch(source, /<button onClick=\{handleLogout\} className="p-2 bg-red-500/);
 });
 
 test('screen wake lock is automatically requested after login and app visibility', () => {

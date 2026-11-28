@@ -2233,7 +2233,7 @@
                   <button className="p-2 bg-blue-600/80 hover:bg-blue-500/80 rounded-xl transition-all border border-blue-400/30" title="Refresh" onClick={handleGlobalRefresh}>
                     <RefreshCw className={`w-4 h-4 text-white ${isFetchingStats || isFetchingVisit ? 'animate-spin' : ''}`} />
                   </button>
-                  <button onClick={handleLogout} className="p-2 bg-red-500 hover:bg-red-600 rounded-xl transition-all border border-red-400/30 shadow-sm" title="Logout"><LogOut className="w-4 h-4 text-white" /></button>
+
                 </div>
                 <div className="flex items-center gap-1.5 text-xs font-bold text-white bg-blue-900/40 px-2.5 py-1 rounded-full border border-blue-600/30">
                   {(appUser?.foto_user || appUser?.['foto user'] || appUser?.foto || appUser?.photo) ? (
@@ -2698,10 +2698,11 @@
 
           </main>
 
-          <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white/95 backdrop-blur-md border-t border-slate-100 px-4 py-4 flex justify-around items-center z-[999999] rounded-t-[2.5rem] shadow-[0_-10px_30px_rgba(0,0,0,0.05)] transition-all">
-            <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 transition-all hover:scale-110 cursor-pointer ${activeTab === 'dashboard' ? 'text-blue-600 scale-110 drop-shadow-sm font-bold' : 'text-slate-400 font-medium'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Beranda</span></button>
-            <button onClick={() => setActiveTab('visit')} className={`flex flex-col items-center gap-1 transition-all hover:scale-110 cursor-pointer ${(activeTab === 'visit' || activeTab === 'visit_form') ? 'text-blue-600 scale-110 drop-shadow-sm font-bold' : 'text-slate-400 font-medium'}`}><MapPin className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Visit</span></button>
-            <button onClick={() => setActiveTab('users')} className={`flex flex-col items-center gap-1 transition-all hover:scale-110 cursor-pointer ${activeTab === 'users' ? 'text-blue-600 scale-110 drop-shadow-sm font-bold' : 'text-slate-400 font-medium'}`}><UserCircle className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Profil</span></button>
+          <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md px-2 py-3 flex justify-around items-center z-[999999] rounded-t-[2rem] shadow-[0_-10px_30px_rgba(0,0,0,0.25)] transition-all" style={{ background: 'linear-gradient(115deg,#102f5e,#071d3f)', borderTop: '1px solid rgba(255,255,255,.15)', paddingBottom: 'calc(.75rem + env(safe-area-inset-bottom, 0px))' }}>
+            <button onClick={() => setActiveTab('dashboard')} className={`flex flex-1 flex-col items-center gap-1 py-1 transition-all hover:scale-110 cursor-pointer ${activeTab === 'dashboard' ? 'text-white scale-110 drop-shadow-sm font-bold' : 'text-blue-200 font-medium'}`}><LayoutDashboard className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Beranda</span></button>
+            <button onClick={() => setActiveTab('visit')} className={`flex flex-1 flex-col items-center gap-1 py-1 transition-all hover:scale-110 cursor-pointer ${(activeTab === 'visit' || activeTab === 'visit_form') ? 'text-white scale-110 drop-shadow-sm font-bold' : 'text-blue-200 font-medium'}`}><MapPin className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Visit</span></button>
+            <button onClick={() => setActiveTab('users')} className={`flex flex-1 flex-col items-center gap-1 py-1 transition-all hover:scale-110 cursor-pointer ${activeTab === 'users' ? 'text-white scale-110 drop-shadow-sm font-bold' : 'text-blue-200 font-medium'}`}><UserCircle className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Profil</span></button>
+            <button onClick={handleLogout} title="Keluar" aria-label="Keluar" className="flex flex-1 flex-col items-center gap-1 py-1 text-blue-200 hover:text-white transition-all hover:scale-110 cursor-pointer"><LogOut className="w-5 h-5" /><span className="text-[10px] uppercase tracking-tighter">Keluar</span></button>
           </nav>
         </div>
         <LapisanKamera />
