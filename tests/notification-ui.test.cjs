@@ -6,7 +6,12 @@ const source = fs.readFileSync('index.html', 'utf8');
 test('header notification button opens completed-visit list from report data', () => {
   assert.match(source, /title="Notifikasi Kunjungan Selesai"[\s\S]*<Bell className=/);
   assert.match(source, /title="Refresh" onClick=\{handleGlobalRefresh\}/);
-  assert.match(source, /className="flex justify-end gap-2"/);
+  assert.match(source, /const visitProgressPercent = hitungPersenKunjungan\(targetCount, visitedCount\)/);
+  assert.match(source, /Nasabah<\/span>/);
+  assert.match(source, /visitProgressPercent/);
+  assert.match(source, /Lihat Daftar/);
+  assert.match(source, /setActiveTab\('visit'\)/);
+  assert.match(source, /Pilih rentang tanggal lalu tekan Tampilkan/);
   assert.match(source, /w-10 h-10 p-2\.5 bg-blue-600\/80/);
   assert.doesNotMatch(source, /<button onClick=\{handleLogout\}[^>]*title="Logout"/);
   assert.match(source, /onClick=\{\(\) => \{ setShowVisitNotifications\(true\); handleFetchReport\(reportFilterDateStart, reportFilterDateEnd\); \}\}/);
