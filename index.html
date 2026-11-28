@@ -2740,7 +2740,11 @@
   </script>
 
   <script>
-    if ("serviceWorker" in navigator) {
+    // APK WebView mengelola cache sendiri (LOAD_NO_CACHE). Jangan daftarkan
+    // Service Worker di jalur APK: beberapa WebView gagal mengambil /sw.js
+    // walau browser normal bisa, lalu error itu mengganggu startup/login.
+    const modeApk = new URLSearchParams(location.search).has('apk');
+    if ("serviceWorker" in navigator && !modeApk) {
       window.addEventListener("load", () => {
         navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" })
           .then(reg => {
